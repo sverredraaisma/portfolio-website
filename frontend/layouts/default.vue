@@ -1,0 +1,27 @@
+<script setup lang="ts">
+import { useAuthStore } from '~/stores/auth'
+const auth = useAuthStore()
+</script>
+
+<template>
+  <div>
+    <header class="border-b border-zinc-800 px-6 py-3 flex items-center justify-between">
+      <NuxtLink to="/" class="text-green-400 font-bold tracking-widest">~/sverre</NuxtLink>
+      <nav class="flex gap-4 text-sm">
+        <NuxtLink to="/posts" class="hover:text-green-400">posts</NuxtLink>
+        <NuxtLink v-if="auth.isAuthenticated" to="/posts/new" class="hover:text-green-400">new</NuxtLink>
+        <template v-if="auth.isAuthenticated">
+          <span class="text-zinc-500">{{ auth.user?.username }}</span>
+          <button class="hover:text-red-400" @click="auth.logout()">logout</button>
+        </template>
+        <template v-else>
+          <NuxtLink to="/login" class="hover:text-green-400">login</NuxtLink>
+          <NuxtLink to="/register" class="hover:text-green-400">register</NuxtLink>
+        </template>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+  </div>
+</template>
