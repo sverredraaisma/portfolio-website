@@ -70,6 +70,12 @@ public static class ServiceCollectionExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(opt =>
             {
+                // Don't translate "sub"/"email" into the long XML-schema claim URIs.
+                // We look up claims by their raw JWT names elsewhere (RpcContext.UserId
+                // reads "sub" directly), so the default mapping just makes that fail
+                // silently.
+                opt.MapInboundClaims = false;
+
                 opt.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,

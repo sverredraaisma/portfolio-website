@@ -51,7 +51,10 @@ public class JwtService : IJwtService
 
     public ClaimsPrincipal? Validate(string token, string expectedPurpose)
     {
-        var handler = new JwtSecurityTokenHandler();
+        // Clear the default inbound claim-type map. Without this, JwtSecurityTokenHandler
+        // rewrites "sub" -> ClaimTypes.NameIdentifier, "email" -> ClaimTypes.Email, etc,
+        // so principal.FindFirst("sub") returns null for our own tokens.
+        var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
         try
         {
             var principal = handler.ValidateToken(token, new TokenValidationParameters
