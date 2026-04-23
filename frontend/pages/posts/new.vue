@@ -1,0 +1,56 @@
+<script setup lang="ts">
+import PostBuilder from '~/components/PostBuilder.vue'
+import type { PostDocument } from '~/types/blocks'
+import { useAuthStore } from '~/stores/auth'
+
+const auth = useAuthStore()
+const router = useRouter()
+const rpc = useRpc()
+
+const title = ref('')
+const slug = ref('')
+const doc = ref<PostDocument>({ blocks: [] })
+const saving = ref(false)
+const error = ref('')
+
+watchEffect(() => {
+  if (!auth.isAuthenticated && process.client) router.push('/login')
+})
+
+async function publish() {
+  saving.value = true
+  error.value = ''
+  try {
+    const res = await rpc.call<{ slug: string }>('posts.create', {
+      title: title.value,
+      slug: slug.value || title.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      blocks: doc.value,
+      published: true
+    })
+    router.push(`/posts/${res.slug}`)
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <section class="max-w-3xl mx-auto px-6 py-10">
+    <h1 class="text-2xl text-green-400 mb-6">$ new post</h1>
+    <div class="space-y-3 mb-6">
+      <input v-model="title" placeholder="title" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
+      <input v-model="slug" placeholder="slug (optional)" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
+    </div>
+
+    <PostBuilder v-model="doc" />
+
+    <div class="mt-6 flex items-center gap-3">
+      <button :disabled="saving" @click="publish" class="bg-green-600 hover:bg-green-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50">
+        {{ saving ? '...' : 'publish' }}
+      </button>
+      <span v-if="error" class="text-red-400 text-sm">{{ error }}</span>
+    </div>
+  </section>
+</template>
