@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatTime } from '~/composables/useDate'
+
 type PostSummary = { id: string; title: string; slug: string; createdAt: string; author: string }
 type PostsPage = { items: PostSummary[]; page: number; pageSize: number; hasMore: boolean }
 
@@ -43,7 +45,7 @@ async function loadMore() {
       <li v-for="p in posts" :key="p.id" class="border border-zinc-800 rounded p-4 hover:border-green-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
           <div class="text-lg">{{ p.title }}</div>
-          <div class="text-xs text-zinc-500">{{ new Date(p.createdAt).toLocaleDateString() }} · {{ p.author }}</div>
+          <div class="text-xs text-zinc-500">{{ formatTime(p.createdAt) }} · {{ p.author }}</div>
         </NuxtLink>
       </li>
       <li v-if="!posts.length" class="text-zinc-500">No posts yet.</li>

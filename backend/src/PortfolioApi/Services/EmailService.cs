@@ -1,29 +1,30 @@
 using MailKit.Net.Smtp;
+using Microsoft.Extensions.Options;
 using MimeKit;
+using PortfolioApi.Configuration;
 
 namespace PortfolioApi.Services;
 
 public class EmailService : IEmailService
 {
-    private readonly IConfiguration _config;
+    private readonly EmailOptions _opt;
     private readonly ILogger<EmailService> _log;
 
-    public EmailService(IConfiguration config, ILogger<EmailService> log)
+    public EmailService(IOptions<EmailOptions> opt, ILogger<EmailService> log)
     {
-        _config = config;
+        _opt = opt.Value;
         _log = log;
     }
 
     public async Task SendVerificationAsync(string toEmail, string jwtToken)
     {
-        var verifyBase = _config["Email:VerifyUrlBase"] ?? "http://localhost:3000/verify";
-        var link = $"{verifyBase}?token={Uri.EscapeDataString(jwtToken)}";
+        var link = $"{_opt.VerifyUrlBase}?token={Uri.EscapeDataString(jwtToken)}";
 
-        var fromAddr = _config["Email:From"]
-            ?? throw new InvalidOperationException("Email:From is not configured");
+        if (string.IsNullOrWhiteSpace(_opt.From))
+            throw new InvalidOperationException("Email:From is not configured");
 
         var msg = new MimeMessage();
-        msg.From.Add(MailboxAddress.Parse(fromAddr));
+        msg.From.Add(MailboxAddress.Parse(_opt.From));
         msg.To.Add(MailboxAddress.Parse(toEmail));
         msg.Subject = "Verify your email";
         msg.Body = new TextPart("html")
@@ -35,8 +36,7 @@ public class EmailService : IEmailService
                 """
         };
 
-        var smtpHost = _config["Email:SmtpHost"];
-        if (string.IsNullOrWhiteSpace(smtpHost))
+        if (string.IsNullOrWhiteSpace(_opt.SmtpHost))
         {
             // No SMTP configured — log a structured event without the address or
             // the link itself (links carry an auth token; never log them).
@@ -47,15 +47,10 @@ public class EmailService : IEmailService
         try
         {
             using var client = new SmtpClient();
-            await client.ConnectAsync(
-                smtpHost,
-                int.Parse(_config["Email:SmtpPort"] ?? "1025"),
-                MailKit.Security.SecureSocketOptions.Auto);
+            await client.ConnectAsync(_opt.SmtpHost, _opt.SmtpPort, MailKit.Security.SecureSocketOptions.Auto);
 
-            var user = _config["Email:SmtpUser"];
-            var pass = _config["Email:SmtpPassword"];
-            if (!string.IsNullOrEmpty(user) && pass is not null)
-                await client.AuthenticateAsync(user, pass);
+            if (!string.IsNullOrEmpty(_opt.SmtpUser) && _opt.SmtpPassword is not null)
+                await client.AuthenticateAsync(_opt.SmtpUser, _opt.SmtpPassword);
 
             await client.SendAsync(msg);
             await client.DisconnectAsync(true);

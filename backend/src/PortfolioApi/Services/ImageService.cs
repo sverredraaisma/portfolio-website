@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using PortfolioApi.Configuration;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
 
@@ -5,21 +7,25 @@ namespace PortfolioApi.Services;
 
 public class ImageService : IImageService
 {
-    private readonly string _mediaRoot;
+    private readonly int _defaultQuality;
 
-    public ImageService(IWebHostEnvironment env)
+    public string MediaRoot { get; }
+
+    public ImageService(IOptions<ImageOptions> opt, IWebHostEnvironment env)
     {
-        _mediaRoot = Path.Combine(env.ContentRootPath, "media");
-        Directory.CreateDirectory(_mediaRoot);
+        var o = opt.Value;
+        MediaRoot = Path.Combine(env.ContentRootPath, o.MediaPath);
+        _defaultQuality = o.WebpQuality;
+        Directory.CreateDirectory(MediaRoot);
     }
 
-    public async Task<string> ConvertToWebpAsync(Stream input, int quality = 80)
+    public async Task<string> ConvertToWebpAsync(Stream input, int? quality = null)
     {
         using var image = await Image.LoadAsync(input);
         var fileName = $"{Guid.NewGuid():N}.webp";
-        var path = Path.Combine(_mediaRoot, fileName);
+        var path = Path.Combine(MediaRoot, fileName);
 
-        var encoder = new WebpEncoder { Quality = quality };
+        var encoder = new WebpEncoder { Quality = quality ?? _defaultQuality };
         await using var fs = File.Create(path);
         await image.SaveAsync(fs, encoder);
 

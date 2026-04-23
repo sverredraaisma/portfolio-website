@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using Konscious.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PortfolioApi.Configuration;
+using PortfolioApi.Constants;
 using PortfolioApi.Data;
 using PortfolioApi.Models;
 
@@ -18,14 +21,14 @@ public class AuthService : IAuthService
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly IEmailService _email;
-    private readonly IConfiguration _config;
+    private readonly JwtOptions _jwtOpt;
 
-    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, IConfiguration config)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, IOptions<JwtOptions> jwtOpt)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
-        _config = config;
+        _jwtOpt = jwtOpt.Value;
     }
 
     public async Task<User> RegisterAsync(string username, string email, string clientHashHex)
@@ -88,7 +91,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> VerifyEmailAsync(string jwtToken)
     {
-        var principal = _jwt.Validate(jwtToken, expectedPurpose: "email-verify");
+        var principal = _jwt.Validate(jwtToken, expectedPurpose: JwtPurpose.EmailVerify);
         if (principal is null) return false;
 
         var sub = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
@@ -108,12 +111,11 @@ public class AuthService : IAuthService
         var rawText = Convert.ToBase64String(raw);
         var hash = SHA256.HashData(raw);
 
-        var days = int.Parse(_config["Jwt:RefreshTokenDays"] ?? "30");
         var rt = new RefreshToken
         {
             UserId = userId,
             TokenHash = hash,
-            ExpiresAt = DateTime.UtcNow.AddDays(days)
+            ExpiresAt = DateTime.UtcNow.AddDays(_jwtOpt.RefreshTokenDays)
         };
         _db.RefreshTokens.Add(rt);
         await _db.SaveChangesAsync();

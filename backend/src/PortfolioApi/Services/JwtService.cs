@@ -1,42 +1,42 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using PortfolioApi.Configuration;
+using PortfolioApi.Constants;
 
 namespace PortfolioApi.Services;
 
 public class JwtService : IJwtService
 {
-    private readonly IConfiguration _config;
+    private readonly JwtOptions _opt;
     private readonly SymmetricSecurityKey _key;
 
-    public JwtService(IConfiguration config)
+    public JwtService(IOptions<JwtOptions> opt)
     {
-        _config = config;
-        var keyText = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key missing");
-        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyText));
+        _opt = opt.Value;
+        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opt.Key));
     }
 
     public string CreateAccessToken(Guid userId, string username)
     {
-        var minutes = int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15");
         return Create(new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new Claim("username", username),
-            new Claim("purpose", "access")
-        }, TimeSpan.FromMinutes(minutes));
+            new Claim("purpose", JwtPurpose.Access)
+        }, TimeSpan.FromMinutes(_opt.AccessTokenMinutes));
     }
 
     public string CreateEmailVerifyToken(Guid userId, string email)
     {
-        var hours = int.Parse(_config["Jwt:EmailVerifyHours"] ?? "24");
         return Create(new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim("purpose", "email-verify")
-        }, TimeSpan.FromHours(hours));
+            new Claim("purpose", JwtPurpose.EmailVerify)
+        }, TimeSpan.FromHours(_opt.EmailVerifyHours));
     }
 
     public ClaimsPrincipal? Validate(string token, string expectedPurpose)
@@ -49,8 +49,8 @@ public class JwtService : IJwtService
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
-                ValidIssuer = _config["Jwt:Issuer"],
-                ValidAudience = _config["Jwt:Audience"],
+                ValidIssuer = _opt.Issuer,
+                ValidAudience = _opt.Audience,
                 IssuerSigningKey = _key
             }, out _);
 
@@ -67,8 +67,8 @@ public class JwtService : IJwtService
     {
         var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
+            issuer: _opt.Issuer,
+            audience: _opt.Audience,
             claims: claims,
             expires: DateTime.UtcNow.Add(lifetime),
             signingCredentials: creds);

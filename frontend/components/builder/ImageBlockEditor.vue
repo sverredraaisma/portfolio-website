@@ -22,8 +22,8 @@ async function onPick(e: Event) {
     const dataBase64 = await toBase64(file)
     const res = await rpc.call<{ url: string }>('posts.uploadImage', { dataBase64 })
     emit('update', { ...props.block, data: { ...props.block.data, src: res.url } })
-  } catch (err: any) {
-    error.value = err.message
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
   } finally {
     uploading.value = false
   }

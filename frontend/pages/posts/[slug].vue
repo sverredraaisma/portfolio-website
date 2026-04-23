@@ -2,6 +2,7 @@
 import type { PostDocument } from '~/types/blocks'
 import BlockRenderer from '~/components/BlockRenderer.vue'
 import TerminalComments from '~/components/TerminalComments.vue'
+import { formatTime } from '~/composables/useDate'
 
 type PostFull = {
   id: string; title: string; slug: string;
@@ -9,7 +10,7 @@ type PostFull = {
 }
 const route = useRoute()
 const rpc = useRpc()
-const { data: post } = await useAsyncData(`post:${route.params.slug}`,
+const { data: post } = await useAsyncData<PostFull>(`post:${route.params.slug}`,
   () => rpc.call<PostFull>('posts.get', { slug: route.params.slug }))
 </script>
 
@@ -18,7 +19,7 @@ const { data: post } = await useAsyncData(`post:${route.params.slug}`,
     <header class="mb-8">
       <h1 class="text-3xl text-green-400">{{ post.title }}</h1>
       <div class="text-xs text-zinc-500 mt-1">
-        {{ new Date(post.createdAt).toLocaleDateString() }} · {{ post.author }}
+        {{ formatTime(post.createdAt) }} · {{ post.author }}
       </div>
     </header>
 

@@ -14,10 +14,10 @@ async function submit() {
   loading.value = true
   try {
     const clientHash = await hashPasswordForTransit(password.value)
-    await rpc.call('auth.register', { username: username.value, email: email.value, clientHash })
+    await rpc.call<void>('auth.register', { username: username.value, email: email.value, clientHash })
     done.value = true
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.value = false
   }

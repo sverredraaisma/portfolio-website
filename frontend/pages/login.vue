@@ -2,6 +2,9 @@
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
 import { useAuthStore } from '~/stores/auth'
 
+type AuthUser = { id: string; username: string; email: string; emailVerified?: boolean }
+type LoginResult = { accessToken: string; refreshToken: string; user: AuthUser }
+
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -15,14 +18,14 @@ async function submit() {
   loading.value = true
   try {
     const clientHash = await hashPasswordForTransit(password.value)
-    const res = await rpc.call<{ accessToken: string; refreshToken: string; user: any }>(
+    const res = await rpc.call<LoginResult>(
       'auth.login',
       { username: username.value, clientHash }
     )
     auth.setSession(res.accessToken, res.refreshToken, res.user)
     router.push('/posts')
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.value = false
   }

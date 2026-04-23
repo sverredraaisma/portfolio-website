@@ -1,56 +1,18 @@
-using System.Text;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using PortfolioApi.Configuration;
 using PortfolioApi.Data;
+using PortfolioApi.Extensions;
 using PortfolioApi.Rpc;
 using PortfolioApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+// Bind + validate options first so the rest of the wiring can rely on
+// JwtOptions/EmailOptions/etc being present and well-formed.
+builder.Services.AddPortfolioOptions(builder.Configuration);
 
-builder.Services.AddSingleton<IJwtService, JwtService>();
-builder.Services.AddSingleton<IEmailService, EmailService>();
-builder.Services.AddSingleton<IImageService, ImageService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-
-builder.Services.AddScoped<RpcRouter>();
-builder.Services.AddScoped<PortfolioApi.Rpc.Methods.AuthMethods>();
-builder.Services.AddScoped<PortfolioApi.Rpc.Methods.PostMethods>();
-builder.Services.AddScoped<PortfolioApi.Rpc.Methods.CommentMethods>();
-
-// JWT signing key must be supplied via configuration (env / user-secrets / vault).
-// Refuse to start if it's missing or shorter than 32 bytes — short keys defeat HS256.
-var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
-{
-    throw new InvalidOperationException(
-        "Jwt:Key is missing or too short (need >= 32 bytes). " +
-        "Set it via env var Jwt__Key or user-secrets — never commit it.");
-}
-
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(opt =>
-    {
-        opt.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.FromSeconds(30)
-        };
-    });
-
-builder.Services.AddAuthorization();
+builder.Services.AddPortfolioServices(builder.Configuration);
+builder.Services.AddPortfolioJwt(builder.Configuration);
 
 builder.Services.AddCors(options =>
 {
@@ -72,22 +34,11 @@ builder.WebHost.ConfigureKestrel(o =>
     o.Limits.MaxRequestBodySize = 8 * 1024 * 1024; // 8 MiB
 });
 
-// Rate limiting. Per-IP fixed window. Tight on /rpc; auth.* methods get an
-// additional inner check inside RpcRouter.
-builder.Services.AddRateLimiter(opt =>
-{
-    opt.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    opt.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 120,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
-});
+// Rate limiting. Pass the options in directly so the partition factory captures
+// concrete values once instead of resolving IOptions per request.
+var rateLimits = builder.Configuration.GetSection(RateLimitingOptions.Section).Get<RateLimitingOptions>()
+                 ?? new RateLimitingOptions();
+builder.Services.AddPortfolioRateLimiting(rateLimits);
 
 var app = builder.Build();
 
@@ -121,12 +72,12 @@ app.UseAuthorization();
 // Single RPC entrypoint. Rate limited by the global limiter above.
 app.MapPost("/rpc", async (HttpContext ctx, RpcRouter router) => await router.HandleAsync(ctx));
 
-// Static media (WebP images).
-var mediaPath = Path.Combine(app.Environment.ContentRootPath, "media");
-Directory.CreateDirectory(mediaPath);
+// Static media (WebP images). Read MediaRoot off IImageService so the path is
+// single-sourced — the service has already created the directory.
+var images = app.Services.GetRequiredService<IImageService>();
 app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 {
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(mediaPath),
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(images.MediaRoot),
     RequestPath = "/media",
     OnPrepareResponse = ctx =>
     {

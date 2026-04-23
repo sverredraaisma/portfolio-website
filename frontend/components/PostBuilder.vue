@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { type Block, type PostDocument, newId } from '~/types/blocks'
-import HeaderBlockEditor from '~/components/builder/HeaderBlockEditor.vue'
-import TextBlockEditor from '~/components/builder/TextBlockEditor.vue'
-import ImageBlockEditor from '~/components/builder/ImageBlockEditor.vue'
 
 const props = defineProps<{ modelValue: PostDocument }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: PostDocument): void }>()
+
+const registry = useBlocks()
 
 function update(blocks: Block[]) {
   emit('update:modelValue', { blocks })
@@ -48,9 +47,11 @@ function move(id: string, dir: -1 | 1) {
           <button class="px-2 py-1 bg-red-900 rounded" @click="remove(b.id)">✕</button>
         </div>
       </div>
-      <HeaderBlockEditor v-if="b.type === 'header'" :block="b" @update="(nb) => patch(b.id, () => nb)" />
-      <TextBlockEditor   v-else-if="b.type === 'text'"  :block="b" @update="(nb) => patch(b.id, () => nb)" />
-      <ImageBlockEditor  v-else-if="b.type === 'image'" :block="b" @update="(nb) => patch(b.id, () => nb)" />
+      <component
+        :is="registry[b.type].editor"
+        :block="b"
+        @update="(nb: Block) => patch(b.id, () => nb)"
+      />
     </div>
 
     <div class="flex gap-2 text-sm">

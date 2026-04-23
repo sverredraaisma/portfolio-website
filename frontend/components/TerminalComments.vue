@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import { formatTime } from '~/composables/useDate'
 
 type Comment = { id: string; body: string; createdAt: string; author: string }
 
@@ -11,11 +12,26 @@ const comments = ref<Comment[]>([])
 const draft = ref('')
 const sending = ref(false)
 const error = ref('')
+const scroller = ref<HTMLElement | null>(null)
 
 async function load() {
   comments.value = await rpc.call<Comment[]>('comments.list', { postId: props.postId })
 }
-onMounted(load)
+
+async function scrollToBottom() {
+  await nextTick()
+  const el = scroller.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+onMounted(async () => {
+  await load()
+  await scrollToBottom()
+})
+
+watch(() => comments.value.length, () => {
+  scrollToBottom()
+})
 
 async function send() {
   const body = draft.value.trim()
@@ -30,23 +46,19 @@ async function send() {
     const c = await rpc.call<Comment>('comments.create', { postId: props.postId, body })
     comments.value.push(c)
     draft.value = ''
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     sending.value = false
   }
-}
-
-function ts(iso: string) {
-  return new Date(iso).toLocaleString()
 }
 </script>
 
 <template>
   <div class="bg-black border border-green-900 rounded p-4 text-sm leading-6 text-green-300">
-    <div class="space-y-1">
+    <div ref="scroller" class="space-y-1 max-h-80 overflow-y-auto">
       <div v-for="c in comments" :key="c.id">
-        <span class="text-green-600">[{{ ts(c.createdAt) }}] {{ c.author }}@portfolio</span>
+        <span class="text-green-600">[{{ formatTime(c.createdAt) }}] {{ c.author }}@portfolio</span>
         <span class="text-zinc-500"> &gt; </span>
         <span class="whitespace-pre-wrap">{{ c.body }}</span>
       </div>
