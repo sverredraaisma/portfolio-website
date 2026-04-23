@@ -9,9 +9,9 @@ namespace PortfolioApi.Rpc.Methods;
 public class PostMethods
 {
     private readonly AppDbContext _db;
-    private readonly ImageService _images;
+    private readonly IImageService _images;
 
-    public PostMethods(AppDbContext db, ImageService images)
+    public PostMethods(AppDbContext db, IImageService images)
     {
         _db = db;
         _images = images;

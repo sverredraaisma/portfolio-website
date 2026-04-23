@@ -7,7 +7,7 @@ using PortfolioApi.Models;
 
 namespace PortfolioApi.Services;
 
-public class AuthService
+public class AuthService : IAuthService
 {
     private const int Argon2Iterations = 3;
     private const int Argon2MemoryKb = 65536; // 64 MiB
@@ -16,10 +16,10 @@ public class AuthService
     private const int SaltSize = 16;
 
     private readonly AppDbContext _db;
-    private readonly JwtService _jwt;
-    private readonly EmailService _email;
+    private readonly IJwtService _jwt;
+    private readonly IEmailService _email;
 
-    public AuthService(AppDbContext db, JwtService jwt, EmailService email)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email)
     {
         _db = db;
         _jwt = jwt;

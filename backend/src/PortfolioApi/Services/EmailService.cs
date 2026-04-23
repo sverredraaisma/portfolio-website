@@ -3,7 +3,7 @@ using MimeKit;
 
 namespace PortfolioApi.Services;
 
-public class EmailService
+public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _log;

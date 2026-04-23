@@ -11,10 +11,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-builder.Services.AddSingleton<JwtService>();
-builder.Services.AddSingleton<EmailService>();
-builder.Services.AddSingleton<ImageService>();
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddSingleton<IEmailService, EmailService>();
+builder.Services.AddSingleton<IImageService, ImageService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<RpcRouter>();
 builder.Services.AddScoped<PortfolioApi.Rpc.Methods.AuthMethods>();

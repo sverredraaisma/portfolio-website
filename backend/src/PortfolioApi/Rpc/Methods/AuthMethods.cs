@@ -7,11 +7,11 @@ namespace PortfolioApi.Rpc.Methods;
 
 public class AuthMethods
 {
-    private readonly AuthService _auth;
-    private readonly JwtService _jwt;
+    private readonly IAuthService _auth;
+    private readonly IJwtService _jwt;
     private readonly AppDbContext _db;
 
-    public AuthMethods(AuthService auth, JwtService jwt, AppDbContext db)
+    public AuthMethods(IAuthService auth, IJwtService jwt, AppDbContext db)
     {
         _auth = auth;
         _jwt = jwt;

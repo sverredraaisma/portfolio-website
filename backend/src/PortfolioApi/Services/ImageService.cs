@@ -3,7 +3,7 @@ using SixLabors.ImageSharp.Formats.Webp;
 
 namespace PortfolioApi.Services;
 
-public class ImageService
+public class ImageService : IImageService
 {
     private readonly string _mediaRoot;
 
@@ -13,8 +13,6 @@ public class ImageService
         Directory.CreateDirectory(_mediaRoot);
     }
 
-    /// Converts arbitrary image bytes to WebP and stores it under /media.
-    /// Returns the public URL path (e.g. "/media/<id>.webp").
     public async Task<string> ConvertToWebpAsync(Stream input, int quality = 80)
     {
         using var image = await Image.LoadAsync(input);
