@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Data;
 using PortfolioApi.Services;
 
@@ -26,7 +25,9 @@ public class AuthMethods
         var clientHash = p.GetProperty("clientHash").GetString() ?? throw new InvalidOperationException("clientHash required");
 
         var user = await _auth.RegisterAsync(username, email, clientHash);
-        return new { user.Id, user.Username, user.Email, emailVerified = false };
+
+        // Don't echo the email back — frontend already has it. Keep response minimal.
+        return new { user.Id, user.Username, emailVerified = false };
     }
 
     public async Task<object?> Login(JsonElement? @params, RpcContext _)
@@ -36,8 +37,14 @@ public class AuthMethods
         var clientHash = p.GetProperty("clientHash").GetString() ?? throw new InvalidOperationException("clientHash required");
 
         var user = await _auth.LoginAsync(username, clientHash);
-        if (user is null) throw new UnauthorizedAccessException("Invalid credentials");
-        if (user.EmailVerifiedAt is null) throw new InvalidOperationException("Email not verified");
+        if (user is null) throw new AuthFailedException("Invalid credentials");
+
+        if (user.EmailVerifiedAt is null)
+        {
+            // Distinguished from "invalid credentials" — anyone seeing this already
+            // got past the password check, so they own the account.
+            throw new InvalidOperationException("Email not verified");
+        }
 
         var access = _jwt.CreateAccessToken(user.Id, user.Username);
         var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id);
@@ -48,6 +55,29 @@ public class AuthMethods
             refreshToken = refresh,
             user = new { user.Id, user.Username, user.Email }
         };
+    }
+
+    public async Task<object?> Refresh(JsonElement? @params, RpcContext _)
+    {
+        var p = Required(@params);
+        var raw = p.GetProperty("refreshToken").GetString() ?? throw new InvalidOperationException("refreshToken required");
+
+        var (tokens, user) = await _auth.RefreshAsync(raw);
+        return new
+        {
+            accessToken = tokens.AccessToken,
+            refreshToken = tokens.RefreshToken,
+            user = new { user.Id, user.Username, user.Email }
+        };
+    }
+
+    public async Task<object?> Logout(JsonElement? @params, RpcContext _)
+    {
+        var p = Required(@params);
+        var raw = p.GetProperty("refreshToken").GetString() ?? throw new InvalidOperationException("refreshToken required");
+
+        await _auth.LogoutAsync(raw);
+        return new { ok = true };
     }
 
     public async Task<object?> VerifyEmail(JsonElement? @params, RpcContext _)
@@ -61,7 +91,7 @@ public class AuthMethods
     public async Task<object?> Me(JsonElement? _, RpcContext ctx)
     {
         var id = ctx.RequireUserId();
-        var user = await _db.Users.FindAsync(id) ?? throw new UnauthorizedAccessException("Unknown user");
+        var user = await _db.Users.FindAsync(id) ?? throw new AuthFailedException("Unknown user");
         return new
         {
             user.Id,

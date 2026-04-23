@@ -19,8 +19,11 @@ public class EmailService : IEmailService
         var verifyBase = _config["Email:VerifyUrlBase"] ?? "http://localhost:3000/verify";
         var link = $"{verifyBase}?token={Uri.EscapeDataString(jwtToken)}";
 
+        var fromAddr = _config["Email:From"]
+            ?? throw new InvalidOperationException("Email:From is not configured");
+
         var msg = new MimeMessage();
-        msg.From.Add(MailboxAddress.Parse(_config["Email:From"]));
+        msg.From.Add(MailboxAddress.Parse(fromAddr));
         msg.To.Add(MailboxAddress.Parse(toEmail));
         msg.Subject = "Verify your email";
         msg.Body = new TextPart("html")
@@ -32,25 +35,37 @@ public class EmailService : IEmailService
                 """
         };
 
+        var smtpHost = _config["Email:SmtpHost"];
+        if (string.IsNullOrWhiteSpace(smtpHost))
+        {
+            // No SMTP configured — log a structured event without the address or
+            // the link itself (links carry an auth token; never log them).
+            _log.LogWarning("SMTP not configured; verification email for user not sent");
+            return;
+        }
+
         try
         {
             using var client = new SmtpClient();
             await client.ConnectAsync(
-                _config["Email:SmtpHost"],
+                smtpHost,
                 int.Parse(_config["Email:SmtpPort"] ?? "1025"),
                 MailKit.Security.SecureSocketOptions.Auto);
 
             var user = _config["Email:SmtpUser"];
-            if (!string.IsNullOrEmpty(user))
-                await client.AuthenticateAsync(user, _config["Email:SmtpPassword"]);
+            var pass = _config["Email:SmtpPassword"];
+            if (!string.IsNullOrEmpty(user) && pass is not null)
+                await client.AuthenticateAsync(user, pass);
 
             await client.SendAsync(msg);
             await client.DisconnectAsync(true);
         }
         catch (Exception ex)
         {
-            // In dev (no SMTP), log the link so the user can still verify.
-            _log.LogWarning(ex, "SMTP send failed; verification link for {Email}: {Link}", toEmail, link);
+            // Don't include the email or token in the log — only that a send
+            // failed. The exception itself goes through ILogger which redacts
+            // none of it, but we keep the structured fields PII-free.
+            _log.LogError(ex, "SMTP send failed");
         }
     }
 }

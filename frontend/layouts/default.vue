@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 const auth = useAuthStore()
+const rpc = useRpc()
+
+async function logout() {
+  // Try to revoke the refresh token server-side; ignore failures (the local
+  // session is cleared either way).
+  if (auth.refreshToken) {
+    try { await rpc.call('auth.logout', { refreshToken: auth.refreshToken }) } catch {}
+  }
+  auth.logout()
+}
 </script>
 
 <template>
@@ -12,7 +22,7 @@ const auth = useAuthStore()
         <NuxtLink v-if="auth.isAuthenticated" to="/posts/new" class="hover:text-green-400">new</NuxtLink>
         <template v-if="auth.isAuthenticated">
           <span class="text-zinc-500">{{ auth.user?.username }}</span>
-          <button class="hover:text-red-400" @click="auth.logout()">logout</button>
+          <button class="hover:text-red-400" @click="logout">logout</button>
         </template>
         <template v-else>
           <NuxtLink to="/login" class="hover:text-green-400">login</NuxtLink>

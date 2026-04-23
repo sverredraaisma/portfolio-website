@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using Konscious.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Data;
@@ -14,26 +13,31 @@ public class AuthService : IAuthService
     private const int Argon2Parallelism = 2;
     private const int Argon2HashSize = 32;
     private const int SaltSize = 16;
+    private const int RefreshTokenBytes = 48;
 
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly IEmailService _email;
+    private readonly IConfiguration _config;
 
-    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, IConfiguration config)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
+        _config = config;
     }
 
     public async Task<User> RegisterAsync(string username, string email, string clientHashHex)
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
+        // Username clashes are exposed (usernames are public anyway).
+        // Email clashes are NOT exposed — that would let an attacker enumerate
+        // which addresses have accounts. We rely on the unique-index +
+        // DbUpdateException catch below for the email case.
         if (await _db.Users.AnyAsync(u => u.Username == username))
             throw new InvalidOperationException("Username taken");
-        if (await _db.Users.AnyAsync(u => u.Email == email))
-            throw new InvalidOperationException("Email taken");
 
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var hash = Argon2(HexToBytes(clientHashHex), salt);
@@ -47,7 +51,17 @@ public class AuthService : IAuthService
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Likely an email-uniqueness violation. Tell the user something
+            // generic — never confirm whether the address is in use.
+            throw new InvalidOperationException(
+                "Registration could not be completed. If you already have an account, sign in or reset your password.");
+        }
 
         var token = _jwt.CreateEmailVerifyToken(user.Id, user.Email);
         await _email.SendVerificationAsync(user.Email, token);
@@ -60,7 +74,13 @@ public class AuthService : IAuthService
         RejectIfLooksLikeRawPassword(clientHashHex);
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
-        if (user is null) return null;
+        if (user is null)
+        {
+            // Run a dummy hash so the response time matches the success path —
+            // mitigates username-enumeration via timing.
+            _ = Argon2(HexToBytes(clientHashHex), new byte[SaltSize]);
+            return null;
+        }
 
         var attempt = Argon2(HexToBytes(clientHashHex), user.PasswordSalt);
         return CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash) ? user : null;
@@ -84,19 +104,58 @@ public class AuthService : IAuthService
 
     public async Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId)
     {
-        var raw = RandomNumberGenerator.GetBytes(48);
+        var raw = RandomNumberGenerator.GetBytes(RefreshTokenBytes);
         var rawText = Convert.ToBase64String(raw);
         var hash = SHA256.HashData(raw);
 
+        var days = int.Parse(_config["Jwt:RefreshTokenDays"] ?? "30");
         var rt = new RefreshToken
         {
             UserId = userId,
             TokenHash = hash,
-            ExpiresAt = DateTime.UtcNow.AddDays(30)
+            ExpiresAt = DateTime.UtcNow.AddDays(days)
         };
         _db.RefreshTokens.Add(rt);
         await _db.SaveChangesAsync();
         return (rawText, rt);
+    }
+
+    public async Task<(AuthTokens tokens, User user)> RefreshAsync(string rawRefreshToken)
+    {
+        var hash = HashRefresh(rawRefreshToken);
+
+        var stored = await _db.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash)
+            ?? throw new AuthFailedException("Refresh token not found");
+
+        if (stored.RevokedAt is not null) throw new AuthFailedException("Refresh token revoked");
+        if (stored.ExpiresAt < DateTime.UtcNow) throw new AuthFailedException("Refresh token expired");
+        if (stored.User is null) throw new AuthFailedException("Refresh token has no user");
+
+        // Rotate: revoke this token and issue a new one in the same transaction.
+        stored.RevokedAt = DateTime.UtcNow;
+        var (newRaw, _) = await IssueRefreshTokenAsync(stored.UserId);
+        await _db.SaveChangesAsync();
+
+        var access = _jwt.CreateAccessToken(stored.User.Id, stored.User.Username);
+        return (new AuthTokens(access, newRaw), stored.User);
+    }
+
+    public async Task LogoutAsync(string rawRefreshToken)
+    {
+        var hash = HashRefresh(rawRefreshToken);
+        var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+        if (stored is null || stored.RevokedAt is not null) return;
+
+        stored.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+    }
+
+    private static byte[] HashRefresh(string raw)
+    {
+        try { return SHA256.HashData(Convert.FromBase64String(raw)); }
+        catch (FormatException) { throw new AuthFailedException("Malformed refresh token"); }
     }
 
     private static byte[] Argon2(byte[] password, byte[] salt)

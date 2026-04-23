@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Data;
 using PortfolioApi.Models;
+using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc.Methods;
 
@@ -57,7 +58,7 @@ public class CommentMethods
         var id = Guid.Parse(p.GetProperty("id").GetString()!);
 
         var c = await _db.Comments.FindAsync(id) ?? throw new InvalidOperationException("Comment not found");
-        if (c.AuthorId != userId) throw new UnauthorizedAccessException("Not your comment");
+        if (c.AuthorId != userId) throw new AuthFailedException("Not your comment");
 
         _db.Comments.Remove(c);
         await _db.SaveChangesAsync();

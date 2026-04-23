@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using PortfolioApi.Rpc.Methods;
+using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc;
 
@@ -20,18 +21,23 @@ public class RpcContext
             ? id : null;
 
     public Guid RequireUserId() =>
-        UserId ?? throw new UnauthorizedAccessException("Not signed in");
+        UserId ?? throw new AuthFailedException("Not signed in");
 }
 
 public class RpcRouter
 {
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.Ordinal);
+    private readonly ILogger<RpcRouter> _log;
 
-    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments)
+    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, ILogger<RpcRouter> log)
     {
+        _log = log;
+
         // Auth
         Register("auth.register", auth.Register);
         Register("auth.login", auth.Login);
+        Register("auth.refresh", auth.Refresh);
+        Register("auth.logout", auth.Logout);
         Register("auth.verifyEmail", auth.VerifyEmail);
         Register("auth.me", auth.Me);
 
@@ -81,17 +87,24 @@ public class RpcRouter
             var result = await handler(req.Params, new RpcContext { Http = http });
             await Write(http, 200, new RpcResponse(Result: result));
         }
-        catch (UnauthorizedAccessException ex)
+        catch (AuthFailedException ex)
         {
-            await Write(http, 401, new RpcResponse(Error: new RpcError("unauthorized", ex.Message)));
+            // The detail is for the log; the client gets a uniform message so an
+            // attacker can't tell whether the user, password, token, or scope failed.
+            _log.LogInformation("auth failure on {Method}: {Reason}", req.Method, ex.Message);
+            await Write(http, 401, new RpcResponse(Error: new RpcError("unauthorized", "Not authorized")));
         }
         catch (InvalidOperationException ex)
         {
+            // Client-correctable: bad params, validation failure, etc.
             await Write(http, 400, new RpcResponse(Error: new RpcError("invalid", ex.Message)));
         }
         catch (Exception ex)
         {
-            await Write(http, 500, new RpcResponse(Error: new RpcError("internal", ex.Message)));
+            // Never leak ex.Message — it can carry stack traces, SQL fragments,
+            // or PII. Log it server-side, return a generic message to the caller.
+            _log.LogError(ex, "Unhandled error in RPC method {Method}", req.Method);
+            await Write(http, 500, new RpcResponse(Error: new RpcError("internal", "Internal server error")));
         }
     }
 
