@@ -32,4 +32,10 @@ public interface IAuthService
     /// Throws AuthFailedException if the token is invalid, expired, or carries
     /// the wrong purpose.
     Task ResetPasswordAsync(string jwtToken, string clientHashHex, CancellationToken cancellationToken = default);
+
+    /// If the Users table is empty, creates an admin account with the supplied
+    /// username/email and a random un-disclosed password. The owner gains access
+    /// by triggering the password-reset flow against the email address. Returns
+    /// true when the seed ran, false when an account already existed.
+    Task<bool> SeedAdminIfEmptyAsync(string username, string email, CancellationToken cancellationToken = default);
 }

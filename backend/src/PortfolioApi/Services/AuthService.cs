@@ -190,6 +190,41 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> SeedAdminIfEmptyAsync(string username, string email, CancellationToken cancellationToken = default)
+    {
+        if (await _db.Users.AnyAsync(cancellationToken)) return false;
+
+        // Mint a high-entropy password we will never log, return, or persist —
+        // the only path back into this account is the password-reset flow,
+        // which goes through the configured email address.
+        var passwordBytes = RandomNumberGenerator.GetBytes(64);
+        try
+        {
+            // Mirror what the client would send: SHA-256 of the password.
+            var clientHash = SHA256.HashData(passwordBytes);
+            var salt = RandomNumberGenerator.GetBytes(SaltSize);
+            var hash = Argon2(clientHash, salt);
+
+            _db.Users.Add(new User
+            {
+                Username = username,
+                Email = email,
+                PasswordHash = hash,
+                PasswordSalt = salt,
+                EmailVerifiedAt = DateTime.UtcNow, // pre-verified so reset works
+                IsAdmin = true
+            });
+            await _db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            // Explicitly zero the buffer so the random password isn't sitting
+            // in memory waiting for the GC.
+            CryptographicOperations.ZeroMemory(passwordBytes);
+        }
+    }
+
     private static byte[] HashRefresh(string raw)
     {
         try { return SHA256.HashData(Convert.FromBase64String(raw)); }

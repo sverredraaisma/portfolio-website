@@ -47,10 +47,25 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
     var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
     log.LogInformation("Applying database migrations...");
     db.Database.Migrate();
     log.LogInformation("Database migrations applied.");
+
+    // First-boot bootstrap: if there are no accounts at all, seed the owner.
+    // The password is random and never disclosed; the owner uses the password
+    // reset flow against the configured email to gain access.
+    var seeded = await auth.SeedAdminIfEmptyAsync(
+        username: "opperautist",
+        email: "sverre@draaisma.dev");
+    if (seeded)
+    {
+        log.LogInformation(
+            "Seeded admin account 'opperautist' (sverre@draaisma.dev). " +
+            "Use the password-reset flow against that email to claim it.");
+    }
 }
 
 // Basic security headers on every response.
