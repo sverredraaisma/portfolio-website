@@ -31,7 +31,7 @@ public class AuthService : IAuthService
         _jwtOpt = jwtOpt.Value;
     }
 
-    public async Task<User> RegisterAsync(string username, string email, string clientHashHex)
+    public async Task<User> RegisterAsync(string username, string email, string clientHashHex, CancellationToken cancellationToken = default)
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
@@ -39,7 +39,7 @@ public class AuthService : IAuthService
         // Email clashes are NOT exposed — that would let an attacker enumerate
         // which addresses have accounts. We rely on the unique-index +
         // DbUpdateException catch below for the email case.
-        if (await _db.Users.AnyAsync(u => u.Username == username))
+        if (await _db.Users.AnyAsync(u => u.Username == username, cancellationToken))
             throw new InvalidOperationException("Username taken");
 
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
@@ -56,7 +56,7 @@ public class AuthService : IAuthService
         _db.Users.Add(user);
         try
         {
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException)
         {
@@ -72,11 +72,11 @@ public class AuthService : IAuthService
         return user;
     }
 
-    public async Task<User?> LoginAsync(string username, string clientHashHex)
+    public async Task<User?> LoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default)
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
         if (user is null)
         {
             // Run a dummy hash so the response time matches the success path —
@@ -89,7 +89,7 @@ public class AuthService : IAuthService
         return CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash) ? user : null;
     }
 
-    public async Task<bool> VerifyEmailAsync(string jwtToken)
+    public async Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default)
     {
         var principal = _jwt.Validate(jwtToken, expectedPurpose: JwtPurpose.EmailVerify);
         if (principal is null) return false;
@@ -97,15 +97,15 @@ public class AuthService : IAuthService
         var sub = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
         if (!Guid.TryParse(sub, out var userId)) return false;
 
-        var user = await _db.Users.FindAsync(userId);
+        var user = await _db.Users.FindAsync(new object?[] { userId }, cancellationToken);
         if (user is null) return false;
 
         user.EmailVerifiedAt ??= DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    public async Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId)
+    public async Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var raw = RandomNumberGenerator.GetBytes(RefreshTokenBytes);
         var rawText = Convert.ToBase64String(raw);
@@ -118,17 +118,17 @@ public class AuthService : IAuthService
             ExpiresAt = DateTime.UtcNow.AddDays(_jwtOpt.RefreshTokenDays)
         };
         _db.RefreshTokens.Add(rt);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
         return (rawText, rt);
     }
 
-    public async Task<(AuthTokens tokens, User user)> RefreshAsync(string rawRefreshToken)
+    public async Task<(AuthTokens tokens, User user)> RefreshAsync(string rawRefreshToken, CancellationToken cancellationToken = default)
     {
         var hash = HashRefresh(rawRefreshToken);
 
         var stored = await _db.RefreshTokens
             .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.TokenHash == hash)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken)
             ?? throw new AuthFailedException("Refresh token not found");
 
         if (stored.RevokedAt is not null) throw new AuthFailedException("Refresh token revoked");
@@ -137,21 +137,21 @@ public class AuthService : IAuthService
 
         // Rotate: revoke this token and issue a new one in the same transaction.
         stored.RevokedAt = DateTime.UtcNow;
-        var (newRaw, _) = await IssueRefreshTokenAsync(stored.UserId);
-        await _db.SaveChangesAsync();
+        var (newRaw, _) = await IssueRefreshTokenAsync(stored.UserId, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
 
         var access = _jwt.CreateAccessToken(stored.User.Id, stored.User.Username);
         return (new AuthTokens(access, newRaw), stored.User);
     }
 
-    public async Task LogoutAsync(string rawRefreshToken)
+    public async Task LogoutAsync(string rawRefreshToken, CancellationToken cancellationToken = default)
     {
         var hash = HashRefresh(rawRefreshToken);
-        var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+        var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken);
         if (stored is null || stored.RevokedAt is not null) return;
 
         stored.RevokedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private static byte[] HashRefresh(string raw)

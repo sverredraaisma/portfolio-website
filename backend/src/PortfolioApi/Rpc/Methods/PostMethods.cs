@@ -8,7 +8,11 @@ namespace PortfolioApi.Rpc.Methods;
 
 // ---- Param records ---------------------------------------------------------
 
-public sealed record PostListParams;
+public sealed record PostListParams
+{
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
+}
 
 public sealed record GetPostParams
 {
@@ -77,20 +81,35 @@ public class PostMethods
         _images = images;
     }
 
-    public async Task<List<PostSummary>> List(PostListParams _, RpcContext __)
+    public async Task<PaginatedResult<PostSummary>> List(PostListParams p, RpcContext ctx)
     {
-        return await _db.Posts
-            .Where(p => p.Published)
-            .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new PostSummary(p.Id, p.Title, p.Slug, p.CreatedAt, p.Author!.Username))
-            .ToListAsync();
+        var page = p.Page < 1 ? 1 : p.Page;
+        var pageSize = Math.Clamp(p.PageSize, 1, 50);
+
+        // Fetch one extra row so HasMore can be computed without a COUNT(*).
+        var rows = await _db.Posts
+            .AsNoTracking()
+            .Where(post => post.Published)
+            .OrderByDescending(post => post.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize + 1)
+            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username))
+            .ToListAsync(ctx.CancellationToken);
+
+        var hasMore = rows.Count > pageSize;
+        if (hasMore) rows.RemoveAt(rows.Count - 1);
+
+        return new PaginatedResult<PostSummary>(rows, page, pageSize, hasMore);
     }
 
     public async Task<PostDetail> Get(GetPostParams p, RpcContext ctx)
     {
+        // AsNoTracking disables relationship fixup, so Include is required for
+        // post.Author to materialise on the projection below.
         var post = await _db.Posts
+            .AsNoTracking()
             .Include(x => x.Author)
-            .FirstOrDefaultAsync(x => x.Slug == p.Slug)
+            .FirstOrDefaultAsync(x => x.Slug == p.Slug, ctx.CancellationToken)
             ?? throw new InvalidOperationException("Post not found");
 
         // Drafts are only visible to their author. Anyone else gets a not-found
@@ -98,11 +117,13 @@ public class PostMethods
         if (!post.Published && post.AuthorId != ctx.UserId)
             throw new InvalidOperationException("Post not found");
 
+        // The stored JsonDocument is already a parsed tree — return its root
+        // element directly instead of round-tripping through a string.
         return new PostDetail(
             post.Id,
             post.Title,
             post.Slug,
-            JsonDocument.Parse(post.Blocks.RootElement.GetRawText()).RootElement,
+            post.Blocks.RootElement,
             post.CreatedAt,
             post.UpdatedAt,
             post.Published,
@@ -126,7 +147,7 @@ public class PostMethods
             AuthorId = userId
         };
         _db.Posts.Add(post);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ctx.CancellationToken);
         return new CreatePostResult(post.Id, post.Slug);
     }
 
@@ -134,7 +155,9 @@ public class PostMethods
     {
         var userId = ctx.RequireUserId();
 
-        var post = await _db.Posts.FindAsync(p.Id) ?? throw new InvalidOperationException("Post not found");
+        // Don't AsNoTracking here — we need EF to track the entity to persist edits.
+        var post = await _db.Posts.FindAsync(new object?[] { p.Id }, ctx.CancellationToken)
+            ?? throw new InvalidOperationException("Post not found");
         if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
         if (p.Title is not null) post.Title = NonNull(p.Title, "title", 200);
@@ -149,7 +172,7 @@ public class PostMethods
         if (p.Published.HasValue) post.Published = p.Published.Value;
         post.UpdatedAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ctx.CancellationToken);
         return new OkResult();
     }
 
@@ -157,11 +180,12 @@ public class PostMethods
     {
         var userId = ctx.RequireUserId();
 
-        var post = await _db.Posts.FindAsync(p.Id) ?? throw new InvalidOperationException("Post not found");
+        var post = await _db.Posts.FindAsync(new object?[] { p.Id }, ctx.CancellationToken)
+            ?? throw new InvalidOperationException("Post not found");
         if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
         _db.Posts.Remove(post);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ctx.CancellationToken);
         return new OkResult();
     }
 

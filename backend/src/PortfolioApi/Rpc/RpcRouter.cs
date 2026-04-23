@@ -22,6 +22,10 @@ public class RpcContext
 
     public Guid RequireUserId() =>
         UserId ?? throw new AuthFailedException("Not signed in");
+
+    /// Aborted when the client disconnects. Pass into EF calls so query work
+    /// stops early instead of holding a DB connection until completion.
+    public CancellationToken CancellationToken => Http.RequestAborted;
 }
 
 public class RpcRouter
@@ -42,7 +46,7 @@ public class RpcRouter
         Register("auth.me", RpcHandlers.Typed<UserDto>(auth.Me));
 
         // Posts
-        Register("posts.list", RpcHandlers.Typed<PostListParams, List<PostSummary>>(posts.List));
+        Register("posts.list", RpcHandlers.Typed<PostListParams, PaginatedResult<PostSummary>>(posts.List));
         Register("posts.get", RpcHandlers.Typed<GetPostParams, PostDetail>(posts.Get));
         Register("posts.create", RpcHandlers.Typed<CreatePostParams, CreatePostResult>(posts.Create));
         Register("posts.update", RpcHandlers.Typed<UpdatePostParams, OkResult>(posts.Update));
@@ -50,7 +54,7 @@ public class RpcRouter
         Register("posts.uploadImage", RpcHandlers.Typed<UploadImageParams, ImageUploadResult>(posts.UploadImage));
 
         // Comments
-        Register("comments.list", RpcHandlers.Typed<ListCommentsParams, List<CommentDto>>(comments.List));
+        Register("comments.list", RpcHandlers.Typed<ListCommentsParams, PaginatedResult<CommentDto>>(comments.List));
         Register("comments.create", RpcHandlers.Typed<CreateCommentParams, CommentDto>(comments.Create));
         Register("comments.delete", RpcHandlers.Typed<DeleteCommentParams, OkResult>(comments.Delete));
     }

@@ -55,17 +55,17 @@ public class AuthMethods
         _db = db;
     }
 
-    public async Task<RegisterResult> Register(RegisterParams p, RpcContext _)
+    public async Task<RegisterResult> Register(RegisterParams p, RpcContext ctx)
     {
-        var user = await _auth.RegisterAsync(p.Username, p.Email, p.ClientHash);
+        var user = await _auth.RegisterAsync(p.Username, p.Email, p.ClientHash, ctx.CancellationToken);
 
         // Don't echo the email back — frontend already has it. Keep response minimal.
         return new RegisterResult(user.Id, user.Username, EmailVerified: false);
     }
 
-    public async Task<AuthSuccess> Login(LoginParams p, RpcContext _)
+    public async Task<AuthSuccess> Login(LoginParams p, RpcContext ctx)
     {
-        var user = await _auth.LoginAsync(p.Username, p.ClientHash);
+        var user = await _auth.LoginAsync(p.Username, p.ClientHash, ctx.CancellationToken);
         if (user is null) throw new AuthFailedException("Invalid credentials");
 
         if (user.EmailVerifiedAt is null)
@@ -76,7 +76,7 @@ public class AuthMethods
         }
 
         var access = _jwt.CreateAccessToken(user.Id, user.Username);
-        var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id);
+        var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id, ctx.CancellationToken);
 
         return new AuthSuccess(
             access,
@@ -84,31 +84,32 @@ public class AuthMethods
             new UserDto(user.Id, user.Username, user.Email, EmailVerified: true));
     }
 
-    public async Task<AuthSuccess> Refresh(RefreshParams p, RpcContext _)
+    public async Task<AuthSuccess> Refresh(RefreshParams p, RpcContext ctx)
     {
-        var (tokens, user) = await _auth.RefreshAsync(p.RefreshToken);
+        var (tokens, user) = await _auth.RefreshAsync(p.RefreshToken, ctx.CancellationToken);
         return new AuthSuccess(
             tokens.AccessToken,
             tokens.RefreshToken,
             new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null));
     }
 
-    public async Task<OkResult> Logout(LogoutParams p, RpcContext _)
+    public async Task<OkResult> Logout(LogoutParams p, RpcContext ctx)
     {
-        await _auth.LogoutAsync(p.RefreshToken);
+        await _auth.LogoutAsync(p.RefreshToken, ctx.CancellationToken);
         return new OkResult();
     }
 
-    public async Task<VerifyResult> VerifyEmail(VerifyEmailParams p, RpcContext _)
+    public async Task<VerifyResult> VerifyEmail(VerifyEmailParams p, RpcContext ctx)
     {
-        var ok = await _auth.VerifyEmailAsync(p.Token);
+        var ok = await _auth.VerifyEmailAsync(p.Token, ctx.CancellationToken);
         return new VerifyResult(ok);
     }
 
     public async Task<UserDto> Me(RpcContext ctx)
     {
         var id = ctx.RequireUserId();
-        var user = await _db.Users.FindAsync(id) ?? throw new AuthFailedException("Unknown user");
+        var user = await _db.Users.FindAsync(new object?[] { id }, ctx.CancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
         return new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null);
     }
 }
