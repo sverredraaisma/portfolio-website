@@ -33,7 +33,7 @@ services:
       # No default — compose will refuse to start until JWT_KEY is set in your
       # shell or in a .env next to docker-compose.yml. Generate one with e.g.
       #   openssl rand -base64 48
-      Jwt__Key: ${JWT_KEY:?JWT_KEY must be set (>= 32 bytes); generate with: openssl rand -base64 48}
+      Jwt__Key: "${JWT_KEY:?JWT_KEY must be set to a >= 32 byte secret. Generate one with openssl rand -base64 48}"
       Cors__FrontendOrigin: http://localhost:3000
       Email__VerifyUrlBase: http://localhost:3000/verify
       # Override these with a real SMTP host for verification mail.
