@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Configuration;
 using PortfolioApi.Data;
@@ -6,6 +7,17 @@ using PortfolioApi.Rpc;
 using PortfolioApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Behind nginx in compose: trust X-Forwarded-* so RemoteIpAddress (used by the
+// rate limiter) is the real client, not nginx's container IP. Lists are cleared
+// because the proxy is on a docker bridge network — its IP isn't a known one
+// to ASP.NET, and the backend isn't directly reachable from the host anyway.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 // Bind + validate options first so the rest of the wiring can rely on
 // JwtOptions/EmailOptions/etc being present and well-formed.
@@ -67,6 +79,9 @@ using (var scope = app.Services.CreateScope())
             "Use the password-reset flow against that email to claim it.");
     }
 }
+
+// Apply X-Forwarded-* before anything that reads RemoteIpAddress or Scheme.
+app.UseForwardedHeaders();
 
 // Basic security headers on every response.
 app.Use(async (ctx, next) =>

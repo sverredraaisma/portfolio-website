@@ -31,29 +31,30 @@ A personal portfolio site for posting about projects and sharing information abo
 ### Option A — everything in Docker
 
 ```bash
-docker compose up --build
+JWT_KEY=$(openssl rand -base64 48) docker compose up --build
 ```
 
-This brings up:
+The whole site lives behind a single nginx reverse proxy on `http://localhost`:
 
-- `postgres` on `:5432`
-- `backend` on `:5080` (container port 8080)
-- `frontend` on `:3000`
-- `mailpit` on `:8025` (web UI for catching verification emails locally)
+- `/` → Nuxt frontend
+- `/api/*` → .NET backend (so `POST /api/rpc`, `GET /api/media/...`)
+- `http://localhost:8025` → Mailpit web UI for catching outbound mail
 
-The frontend's browser bundle hits `http://localhost:5080`; SSR hits the backend over the compose network at `http://backend:8080`. Set `JWT_KEY` in your shell or a `.env` next to `docker-compose.yml` to override the default secret.
+Same-origin means **no CORS configuration to maintain**. Backend and frontend containers are not exposed to the host directly — if you need to poke the backend from outside, add a `ports: ["5080:8080"]` block under `backend` temporarily.
+
+`PUBLIC_PORT` overrides the host port (defaults to 80). `PUBLIC_ORIGIN` overrides the URL embedded in verification / reset emails (defaults to `http://localhost`).
 
 ### Option B — local dev (hot reload)
 
-Prerequisites: Node 20+, .NET 8 SDK, Docker (for Postgres only).
+Prerequisites: Node 20+, .NET 8 SDK, Docker (for Postgres + Mailpit).
 
 ```bash
 docker compose up -d postgres mailpit
-dotnet run --project backend/src/PortfolioApi
-cd frontend && npm install && npm run dev
+Jwt__Key=$(openssl rand -base64 48) dotnet run --project backend/src/PortfolioApi
+cd frontend && npm install && NUXT_PUBLIC_API_BASE=http://localhost:5080 npm run dev
 ```
 
-The frontend runs on `http://localhost:3000` and talks to the backend on `http://localhost:5080` by default. Override with `NUXT_PUBLIC_API_BASE`.
+In dev mode the frontend hits the backend directly on `:5080` and CORS *does* apply — `Cors:FrontendOrigin` defaults to `http://localhost:3000`, override via the `Cors__FrontendOrigin` env var if you run Nuxt elsewhere. Note that `dotnet run` defaults Kestrel to `http://localhost:5080` per `appsettings.json`.
 
 ## Auth flow
 

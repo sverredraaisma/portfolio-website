@@ -54,13 +54,32 @@ Comments are flat (no threading), ordered by creation time. The frontend renders
 
 ## Running locally
 
+Full stack (everything behind nginx on `http://localhost`):
+
 ```bash
-docker compose up -d                                        # postgres
-dotnet run --project backend/src/PortfolioApi               # api on :5080
-cd frontend && npm run dev                                  # nuxt on :3000
+JWT_KEY=$(openssl rand -base64 48) docker compose up --build
 ```
 
-Migrations: `dotnet ef migrations add <Name> --project backend/src/PortfolioApi`.
+Hot-reload dev mode (backend + frontend on the host, only postgres in docker):
+
+```bash
+docker compose up -d postgres mailpit
+Jwt__Key=$(openssl rand -base64 48) dotnet run --project backend/src/PortfolioApi  # :5080
+cd frontend && NUXT_PUBLIC_API_BASE=http://localhost:5080 npm run dev               # :3000
+```
+
+In docker mode the browser sees a single origin and CORS is moot. In dev mode the browser hits `:5080` cross-origin, so the backend's CORS policy needs to allow the dev frontend's origin (default `http://localhost:3000`).
+
+Migrations: generated via the SDK image so you don't need a local .NET SDK:
+
+```bash
+docker run --rm -v "$(pwd)/backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:8.0 \
+  bash -c 'dotnet tool install -g dotnet-ef --version 8.0.11 >/dev/null && \
+           export PATH=$PATH:/root/.dotnet/tools && \
+           dotnet ef migrations add <Name> --project src/PortfolioApi'
+```
+
+`AppDbContextFactory` exists so EF tools can scaffold without bootstrapping the host (which now refuses to start without `Jwt:Key`). Don't delete it.
 
 ## What not to do
 

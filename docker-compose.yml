@@ -7,8 +7,9 @@ services:
       POSTGRES_USER: portfolio
       POSTGRES_PASSWORD: portfolio
       POSTGRES_DB: portfolio
-    ports:
-      - "5432:5432"
+    # Postgres is only reachable inside the compose network — no host port.
+    # Add a `ports: ["5432:5432"]` block here temporarily if you need to
+    # connect from a local SQL client.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,20 +30,24 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      # Trust X-Forwarded-* from any proxy on the docker network. The container
+      # is not exposed to the host, so the only client is nginx.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=portfolio;Username=portfolio;Password=portfolio
       # No default — compose will refuse to start until JWT_KEY is set in your
       # shell or in a .env next to docker-compose.yml. Generate one with e.g.
       #   openssl rand -base64 48
       Jwt__Key: "${JWT_KEY:?JWT_KEY must be set to a >= 32 byte secret. Generate one with openssl rand -base64 48}"
-      Cors__FrontendOrigin: http://localhost:3000
-      Email__VerifyUrlBase: http://localhost:3000/verify
-      Email__ResetUrlBase: http://localhost:3000/reset-password
-      # Override these with a real SMTP host for verification mail.
+      # Same-origin: emails point at the public host (nginx). Override
+      # PUBLIC_ORIGIN in .env for production deployments.
+      Email__VerifyUrlBase: ${PUBLIC_ORIGIN:-http://localhost}/verify
+      Email__ResetUrlBase: ${PUBLIC_ORIGIN:-http://localhost}/reset-password
+      # CORS is now a no-op (browser always hits the same origin via nginx),
+      # but the policy still applies if someone connects directly to :8080.
+      Cors__FrontendOrigin: ${PUBLIC_ORIGIN:-http://localhost}
       Email__SmtpHost: ${SMTP_HOST:-mailpit}
       Email__SmtpPort: ${SMTP_PORT:-1025}
       Email__From: ${SMTP_FROM:-noreply@example.com}
-    ports:
-      - "5080:8080"
     volumes:
       - backend_media:/app/media
 
@@ -55,12 +60,23 @@ services:
     depends_on:
       - backend
     environment:
-      # Browser hits the backend through the host port.
-      NUXT_PUBLIC_API_BASE: http://localhost:5080
-      # SSR hits the backend over the compose network.
+      # Browser-side: relative URL on the same origin as the page. CORS gone.
+      NUXT_PUBLIC_API_BASE: /api
+      # SSR-side: keep the request on the docker network instead of bouncing
+      # back out through nginx.
       NUXT_API_BASE_INTERNAL: http://backend:8080
+
+  nginx:
+    image: nginx:alpine
+    container_name: portfolio-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
     ports:
-      - "3000:3000"
+      - "${PUBLIC_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
   # Local SMTP catcher so verification emails are visible in dev.
   # Web UI: http://localhost:8025
@@ -69,7 +85,6 @@ services:
     container_name: portfolio-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025"
       - "8025:8025"
 
 volumes:
