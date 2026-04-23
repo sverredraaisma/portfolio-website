@@ -16,12 +16,23 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = accessToken
       this.refreshToken = refreshToken
       this.user = user
-      if (process.client) {
+      if (import.meta.client) {
         localStorage.setItem('auth', JSON.stringify({ accessToken, refreshToken, user }))
       }
     },
+    setTokens(access: string, refresh: string) {
+      this.accessToken = access
+      this.refreshToken = refresh
+      if (import.meta.client) {
+        localStorage.setItem('auth', JSON.stringify({
+          accessToken: access,
+          refreshToken: refresh,
+          user: this.user
+        }))
+      }
+    },
     hydrate() {
-      if (!process.client) return
+      if (!import.meta.client) return
       const raw = localStorage.getItem('auth')
       if (!raw) return
       try {
@@ -35,7 +46,7 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = ''
       this.refreshToken = ''
       this.user = null
-      if (process.client) localStorage.removeItem('auth')
+      if (import.meta.client) localStorage.removeItem('auth')
     }
   }
 })

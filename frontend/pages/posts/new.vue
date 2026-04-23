@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import PostBuilder from '~/components/PostBuilder.vue'
 import type { PostDocument } from '~/types/blocks'
-import { useAuthStore } from '~/stores/auth'
 
-const auth = useAuthStore()
+definePageMeta({ middleware: 'auth' })
+
 const router = useRouter()
 const rpc = useRpc()
 
@@ -12,10 +12,6 @@ const slug = ref('')
 const doc = ref<PostDocument>({ blocks: [] })
 const saving = ref(false)
 const error = ref('')
-
-watchEffect(() => {
-  if (!auth.isAuthenticated && process.client) router.push('/login')
-})
 
 async function publish() {
   saving.value = true
@@ -28,8 +24,8 @@ async function publish() {
       published: true
     })
     router.push(`/posts/${res.slug}`)
-  } catch (e: any) {
-    error.value = e.message
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     saving.value = false
   }
