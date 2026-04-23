@@ -154,6 +154,42 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+        if (user is null) return; // silent — don't leak whether the address has an account
+
+        var token = _jwt.CreatePasswordResetToken(user.Id);
+        await _email.SendPasswordResetAsync(user.Email, token);
+    }
+
+    public async Task ResetPasswordAsync(string jwtToken, string clientHashHex, CancellationToken cancellationToken = default)
+    {
+        RejectIfLooksLikeRawPassword(clientHashHex);
+
+        var principal = _jwt.Validate(jwtToken, expectedPurpose: JwtPurpose.PasswordReset);
+        if (principal is null) throw new AuthFailedException("Invalid or expired reset token");
+
+        var sub = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        if (!Guid.TryParse(sub, out var userId)) throw new AuthFailedException("Reset token has no subject");
+
+        var user = await _db.Users.FindAsync(new object?[] { userId }, cancellationToken)
+            ?? throw new AuthFailedException("User not found");
+
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+        var hash = Argon2(HexToBytes(clientHashHex), salt);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+
+        // A password reset is the explicit "I lost control of this account" signal —
+        // revoke every active refresh token so any session held by an attacker dies.
+        await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     private static byte[] HashRefresh(string raw)
     {
         try { return SHA256.HashData(Convert.FromBase64String(raw)); }

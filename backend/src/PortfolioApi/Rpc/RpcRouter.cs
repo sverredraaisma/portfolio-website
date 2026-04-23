@@ -52,6 +52,8 @@ public class RpcRouter
         Register("auth.refresh", RpcHandlers.Typed<RefreshParams, AuthSuccess>(auth.Refresh));
         Register("auth.logout", RpcHandlers.Typed<LogoutParams, OkResult>(auth.Logout));
         Register("auth.verifyEmail", RpcHandlers.Typed<VerifyEmailParams, VerifyResult>(auth.VerifyEmail));
+        Register("auth.requestPasswordReset", RpcHandlers.Typed<RequestPasswordResetParams, OkResult>(auth.RequestPasswordReset));
+        Register("auth.resetPassword", RpcHandlers.Typed<ResetPasswordParams, OkResult>(auth.ResetPassword));
         Register("auth.me", RpcHandlers.Typed<UserDto>(auth.Me));
 
         // Posts

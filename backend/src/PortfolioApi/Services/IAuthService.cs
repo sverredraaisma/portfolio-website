@@ -21,4 +21,15 @@ public interface IAuthService
 
     /// Revokes the supplied refresh token. Idempotent — unknown tokens are ignored.
     Task LogoutAsync(string rawRefreshToken, CancellationToken cancellationToken = default);
+
+    /// Sends a password-reset email if a user exists at <paramref name="email"/>.
+    /// Returns silently otherwise to avoid leaking which addresses have accounts.
+    Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
+
+    /// Validates the password-reset JWT, replaces the user's password hash with
+    /// a fresh Argon2 over <paramref name="clientHashHex"/>, and revokes every
+    /// active refresh token for the user (forcing re-login everywhere).
+    /// Throws AuthFailedException if the token is invalid, expired, or carries
+    /// the wrong purpose.
+    Task ResetPasswordAsync(string jwtToken, string clientHashHex, CancellationToken cancellationToken = default);
 }

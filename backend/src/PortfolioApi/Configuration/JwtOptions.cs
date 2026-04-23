@@ -26,4 +26,7 @@ public sealed class JwtOptions
 
     [Range(1, 168)]
     public int EmailVerifyHours { get; set; } = 24;
+
+    [Range(1, 24)]
+    public int PasswordResetHours { get; set; } = 1;
 }

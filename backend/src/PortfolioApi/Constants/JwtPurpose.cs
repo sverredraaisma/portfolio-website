@@ -7,4 +7,5 @@ public static class JwtPurpose
 {
     public const string Access = "access";
     public const string EmailVerify = "email-verify";
+    public const string PasswordReset = "password-reset";
 }

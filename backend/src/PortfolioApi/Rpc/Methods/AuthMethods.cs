@@ -35,6 +35,17 @@ public sealed record VerifyEmailParams
     public required string Token { get; init; }
 }
 
+public sealed record RequestPasswordResetParams
+{
+    public required string Email { get; init; }
+}
+
+public sealed record ResetPasswordParams
+{
+    public required string Token { get; init; }
+    public required string ClientHash { get; init; }
+}
+
 // ---- Response records ------------------------------------------------------
 
 public sealed record UserDto(Guid Id, string Username, string Email, bool EmailVerified, bool IsAdmin);
@@ -103,6 +114,20 @@ public class AuthMethods
     {
         var ok = await _auth.VerifyEmailAsync(p.Token, ctx.CancellationToken);
         return new VerifyResult(ok);
+    }
+
+    public async Task<OkResult> RequestPasswordReset(RequestPasswordResetParams p, RpcContext ctx)
+    {
+        // Always returns ok — the service silently no-ops for unknown emails so
+        // attackers can't enumerate which addresses have accounts.
+        await _auth.RequestPasswordResetAsync(p.Email, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> ResetPassword(ResetPasswordParams p, RpcContext ctx)
+    {
+        await _auth.ResetPasswordAsync(p.Token, p.ClientHash, ctx.CancellationToken);
+        return new OkResult();
     }
 
     public async Task<UserDto> Me(RpcContext ctx)

@@ -36,6 +36,7 @@ services:
       Jwt__Key: "${JWT_KEY:?JWT_KEY must be set to a >= 32 byte secret. Generate one with openssl rand -base64 48}"
       Cors__FrontendOrigin: http://localhost:3000
       Email__VerifyUrlBase: http://localhost:3000/verify
+      Email__ResetUrlBase: http://localhost:3000/reset-password
       # Override these with a real SMTP host for verification mail.
       Email__SmtpHost: ${SMTP_HOST:-mailpit}
       Email__SmtpPort: ${SMTP_PORT:-1025}

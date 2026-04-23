@@ -43,5 +43,8 @@ async function submit() {
       </button>
     </form>
     <p v-if="error" class="text-red-400 text-sm mt-3">{{ error }}</p>
+    <p class="text-xs text-zinc-500 mt-4">
+      <NuxtLink to="/forgot-password" class="hover:text-green-400">forgot password?</NuxtLink>
+    </p>
   </section>
 </template>

@@ -40,6 +40,15 @@ public class JwtService : IJwtService
         }, TimeSpan.FromHours(_opt.EmailVerifyHours));
     }
 
+    public string CreatePasswordResetToken(Guid userId)
+    {
+        return Create(new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new Claim("purpose", JwtPurpose.PasswordReset)
+        }, TimeSpan.FromHours(_opt.PasswordResetHours));
+    }
+
     public ClaimsPrincipal? Validate(string token, string expectedPurpose)
     {
         var handler = new JwtSecurityTokenHandler();
