@@ -1,5 +1,7 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PortfolioApi.Data;
@@ -21,8 +23,15 @@ builder.Services.AddScoped<PortfolioApi.Rpc.Methods.AuthMethods>();
 builder.Services.AddScoped<PortfolioApi.Rpc.Methods.PostMethods>();
 builder.Services.AddScoped<PortfolioApi.Rpc.Methods.CommentMethods>();
 
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Jwt:Key missing");
+// JWT signing key must be supplied via configuration (env / user-secrets / vault).
+// Refuse to start if it's missing or shorter than 32 bytes — short keys defeat HS256.
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Key is missing or too short (need >= 32 bytes). " +
+        "Set it via env var Jwt__Key or user-secrets — never commit it.");
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -36,7 +45,8 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
     });
 
@@ -49,6 +59,34 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
+});
+
+// Cap request bodies. RPC payloads should be small; image uploads have their own
+// stricter cap inside PostMethods.UploadImage.
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 8 * 1024 * 1024;
+});
+builder.WebHost.ConfigureKestrel(o =>
+{
+    o.Limits.MaxRequestBodySize = 8 * 1024 * 1024; // 8 MiB
+});
+
+// Rate limiting. Per-IP fixed window. Tight on /rpc; auth.* methods get an
+// additional inner check inside RpcRouter.
+builder.Services.AddRateLimiter(opt =>
+{
+    opt.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    opt.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 
 var app = builder.Build();
@@ -64,11 +102,23 @@ using (var scope = app.Services.CreateScope())
     log.LogInformation("Database migrations applied.");
 }
 
+// Basic security headers on every response.
+app.Use(async (ctx, next) =>
+{
+    var h = ctx.Response.Headers;
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "no-referrer";
+    h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    await next();
+});
+
+app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Single RPC entrypoint.
+// Single RPC entrypoint. Rate limited by the global limiter above.
 app.MapPost("/rpc", async (HttpContext ctx, RpcRouter router) => await router.HandleAsync(ctx));
 
 // Static media (WebP images).
@@ -77,7 +127,12 @@ Directory.CreateDirectory(mediaPath);
 app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(mediaPath),
-    RequestPath = "/media"
+    RequestPath = "/media",
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        ctx.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    }
 });
 
 app.Run();

@@ -30,7 +30,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=portfolio;Username=portfolio;Password=portfolio
-      Jwt__Key: ${JWT_KEY:-CHANGE_ME_TO_A_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS}
+      # No default — compose will refuse to start until JWT_KEY is set in your
+      # shell or in a .env next to docker-compose.yml. Generate one with e.g.
+      #   openssl rand -base64 48
+      Jwt__Key: ${JWT_KEY:?JWT_KEY must be set (>= 32 bytes); generate with: openssl rand -base64 48}
       Cors__FrontendOrigin: http://localhost:3000
       Email__VerifyUrlBase: http://localhost:3000/verify
       # Override these with a real SMTP host for verification mail.
