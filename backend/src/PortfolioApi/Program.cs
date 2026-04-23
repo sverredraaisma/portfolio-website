@@ -53,6 +53,17 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Apply any pending EF Core migrations on startup.
+// Postgres readiness is handled by the docker compose healthcheck.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    log.LogInformation("Applying database migrations...");
+    db.Database.Migrate();
+    log.LogInformation("Database migrations applied.");
+}
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
