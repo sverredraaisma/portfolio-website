@@ -28,29 +28,29 @@ A personal portfolio site for posting about projects and sharing information abo
 
 ## Getting started
 
-### Prerequisites
-- Node 20+
-- .NET 8 SDK
-- Docker (for the local Postgres)
+### Option A — everything in Docker
 
-### Database
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-### Backend
-```bash
-cd backend
-dotnet restore
-dotnet ef database update --project src/PortfolioApi
-dotnet run --project src/PortfolioApi
-```
+This brings up:
 
-### Frontend
+- `postgres` on `:5432`
+- `backend` on `:5080` (container port 8080)
+- `frontend` on `:3000`
+- `mailpit` on `:8025` (web UI for catching verification emails locally)
+
+The frontend's browser bundle hits `http://localhost:5080`; SSR hits the backend over the compose network at `http://backend:8080`. Set `JWT_KEY` in your shell or a `.env` next to `docker-compose.yml` to override the default secret.
+
+### Option B — local dev (hot reload)
+
+Prerequisites: Node 20+, .NET 8 SDK, Docker (for Postgres only).
+
 ```bash
-cd frontend
-npm install
-npm run dev
+docker compose up -d postgres mailpit
+dotnet run --project backend/src/PortfolioApi
+cd frontend && npm install && npm run dev
 ```
 
 The frontend runs on `http://localhost:3000` and talks to the backend on `http://localhost:5080` by default. Override with `NUXT_PUBLIC_API_BASE`.

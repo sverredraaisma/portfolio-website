@@ -11,6 +11,63 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio -d portfolio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: portfolio-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=portfolio;Username=portfolio;Password=portfolio
+      Jwt__Key: ${JWT_KEY:-CHANGE_ME_TO_A_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS}
+      Cors__FrontendOrigin: http://localhost:3000
+      Email__VerifyUrlBase: http://localhost:3000/verify
+      # Override these with a real SMTP host for verification mail.
+      Email__SmtpHost: ${SMTP_HOST:-mailpit}
+      Email__SmtpPort: ${SMTP_PORT:-1025}
+      Email__From: ${SMTP_FROM:-noreply@example.com}
+    ports:
+      - "5080:8080"
+    volumes:
+      - backend_media:/app/media
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: portfolio-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Browser hits the backend through the host port.
+      NUXT_PUBLIC_API_BASE: http://localhost:5080
+      # SSR hits the backend over the compose network.
+      NUXT_API_BASE_INTERNAL: http://backend:8080
+    ports:
+      - "3000:3000"
+
+  # Local SMTP catcher so verification emails are visible in dev.
+  # Web UI: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: portfolio-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
   postgres_data:
+  backend_media:
