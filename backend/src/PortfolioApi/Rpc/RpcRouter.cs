@@ -34,25 +34,25 @@ public class RpcRouter
         _log = log;
 
         // Auth
-        Register("auth.register", auth.Register);
-        Register("auth.login", auth.Login);
-        Register("auth.refresh", auth.Refresh);
-        Register("auth.logout", auth.Logout);
-        Register("auth.verifyEmail", auth.VerifyEmail);
-        Register("auth.me", auth.Me);
+        Register("auth.register", RpcHandlers.Typed<RegisterParams, RegisterResult>(auth.Register));
+        Register("auth.login", RpcHandlers.Typed<LoginParams, AuthSuccess>(auth.Login));
+        Register("auth.refresh", RpcHandlers.Typed<RefreshParams, AuthSuccess>(auth.Refresh));
+        Register("auth.logout", RpcHandlers.Typed<LogoutParams, OkResult>(auth.Logout));
+        Register("auth.verifyEmail", RpcHandlers.Typed<VerifyEmailParams, VerifyResult>(auth.VerifyEmail));
+        Register("auth.me", RpcHandlers.Typed<UserDto>(auth.Me));
 
         // Posts
-        Register("posts.list", posts.List);
-        Register("posts.get", posts.Get);
-        Register("posts.create", posts.Create);
-        Register("posts.update", posts.Update);
-        Register("posts.delete", posts.Delete);
-        Register("posts.uploadImage", posts.UploadImage);
+        Register("posts.list", RpcHandlers.Typed<PostListParams, List<PostSummary>>(posts.List));
+        Register("posts.get", RpcHandlers.Typed<GetPostParams, PostDetail>(posts.Get));
+        Register("posts.create", RpcHandlers.Typed<CreatePostParams, CreatePostResult>(posts.Create));
+        Register("posts.update", RpcHandlers.Typed<UpdatePostParams, OkResult>(posts.Update));
+        Register("posts.delete", RpcHandlers.Typed<DeletePostParams, OkResult>(posts.Delete));
+        Register("posts.uploadImage", RpcHandlers.Typed<UploadImageParams, ImageUploadResult>(posts.UploadImage));
 
         // Comments
-        Register("comments.list", comments.List);
-        Register("comments.create", comments.Create);
-        Register("comments.delete", comments.Delete);
+        Register("comments.list", RpcHandlers.Typed<ListCommentsParams, List<CommentDto>>(comments.List));
+        Register("comments.create", RpcHandlers.Typed<CreateCommentParams, CommentDto>(comments.Create));
+        Register("comments.delete", RpcHandlers.Typed<DeleteCommentParams, OkResult>(comments.Delete));
     }
 
     private void Register(string method, RpcHandler handler) => _handlers[method] = handler;

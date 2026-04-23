@@ -1,8 +1,46 @@
-using System.Text.Json;
 using PortfolioApi.Data;
 using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc.Methods;
+
+// ---- Param records ---------------------------------------------------------
+
+/// Required-keyword properties: missing fields throw on deserialisation, which
+/// the typed adapter translates into a 400 with the offending field name.
+public sealed record RegisterParams
+{
+    public required string Username { get; init; }
+    public required string Email { get; init; }
+    public required string ClientHash { get; init; }
+}
+
+public sealed record LoginParams
+{
+    public required string Username { get; init; }
+    public required string ClientHash { get; init; }
+}
+
+public sealed record RefreshParams
+{
+    public required string RefreshToken { get; init; }
+}
+
+public sealed record LogoutParams
+{
+    public required string RefreshToken { get; init; }
+}
+
+public sealed record VerifyEmailParams
+{
+    public required string Token { get; init; }
+}
+
+// ---- Response records ------------------------------------------------------
+
+public sealed record UserDto(Guid Id, string Username, string Email, bool EmailVerified);
+public sealed record RegisterResult(Guid Id, string Username, bool EmailVerified);
+public sealed record AuthSuccess(string AccessToken, string RefreshToken, UserDto User);
+public sealed record VerifyResult(bool Verified);
 
 public class AuthMethods
 {
@@ -17,26 +55,17 @@ public class AuthMethods
         _db = db;
     }
 
-    public async Task<object?> Register(JsonElement? @params, RpcContext _)
+    public async Task<RegisterResult> Register(RegisterParams p, RpcContext _)
     {
-        var p = Required(@params);
-        var username = p.GetProperty("username").GetString() ?? throw new InvalidOperationException("username required");
-        var email = p.GetProperty("email").GetString() ?? throw new InvalidOperationException("email required");
-        var clientHash = p.GetProperty("clientHash").GetString() ?? throw new InvalidOperationException("clientHash required");
-
-        var user = await _auth.RegisterAsync(username, email, clientHash);
+        var user = await _auth.RegisterAsync(p.Username, p.Email, p.ClientHash);
 
         // Don't echo the email back — frontend already has it. Keep response minimal.
-        return new { user.Id, user.Username, emailVerified = false };
+        return new RegisterResult(user.Id, user.Username, EmailVerified: false);
     }
 
-    public async Task<object?> Login(JsonElement? @params, RpcContext _)
+    public async Task<AuthSuccess> Login(LoginParams p, RpcContext _)
     {
-        var p = Required(@params);
-        var username = p.GetProperty("username").GetString() ?? throw new InvalidOperationException("username required");
-        var clientHash = p.GetProperty("clientHash").GetString() ?? throw new InvalidOperationException("clientHash required");
-
-        var user = await _auth.LoginAsync(username, clientHash);
+        var user = await _auth.LoginAsync(p.Username, p.ClientHash);
         if (user is null) throw new AuthFailedException("Invalid credentials");
 
         if (user.EmailVerifiedAt is null)
@@ -49,58 +78,37 @@ public class AuthMethods
         var access = _jwt.CreateAccessToken(user.Id, user.Username);
         var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id);
 
-        return new
-        {
-            accessToken = access,
-            refreshToken = refresh,
-            user = new { user.Id, user.Username, user.Email }
-        };
+        return new AuthSuccess(
+            access,
+            refresh,
+            new UserDto(user.Id, user.Username, user.Email, EmailVerified: true));
     }
 
-    public async Task<object?> Refresh(JsonElement? @params, RpcContext _)
+    public async Task<AuthSuccess> Refresh(RefreshParams p, RpcContext _)
     {
-        var p = Required(@params);
-        var raw = p.GetProperty("refreshToken").GetString() ?? throw new InvalidOperationException("refreshToken required");
-
-        var (tokens, user) = await _auth.RefreshAsync(raw);
-        return new
-        {
-            accessToken = tokens.AccessToken,
-            refreshToken = tokens.RefreshToken,
-            user = new { user.Id, user.Username, user.Email }
-        };
+        var (tokens, user) = await _auth.RefreshAsync(p.RefreshToken);
+        return new AuthSuccess(
+            tokens.AccessToken,
+            tokens.RefreshToken,
+            new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null));
     }
 
-    public async Task<object?> Logout(JsonElement? @params, RpcContext _)
+    public async Task<OkResult> Logout(LogoutParams p, RpcContext _)
     {
-        var p = Required(@params);
-        var raw = p.GetProperty("refreshToken").GetString() ?? throw new InvalidOperationException("refreshToken required");
-
-        await _auth.LogoutAsync(raw);
-        return new { ok = true };
+        await _auth.LogoutAsync(p.RefreshToken);
+        return new OkResult();
     }
 
-    public async Task<object?> VerifyEmail(JsonElement? @params, RpcContext _)
+    public async Task<VerifyResult> VerifyEmail(VerifyEmailParams p, RpcContext _)
     {
-        var p = Required(@params);
-        var token = p.GetProperty("token").GetString() ?? throw new InvalidOperationException("token required");
-        var ok = await _auth.VerifyEmailAsync(token);
-        return new { verified = ok };
+        var ok = await _auth.VerifyEmailAsync(p.Token);
+        return new VerifyResult(ok);
     }
 
-    public async Task<object?> Me(JsonElement? _, RpcContext ctx)
+    public async Task<UserDto> Me(RpcContext ctx)
     {
         var id = ctx.RequireUserId();
         var user = await _db.Users.FindAsync(id) ?? throw new AuthFailedException("Unknown user");
-        return new
-        {
-            user.Id,
-            user.Username,
-            user.Email,
-            emailVerified = user.EmailVerifiedAt is not null
-        };
+        return new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null);
     }
-
-    private static JsonElement Required(JsonElement? p) =>
-        p ?? throw new InvalidOperationException("params required");
 }

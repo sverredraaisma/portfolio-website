@@ -6,6 +6,60 @@ using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc.Methods;
 
+// ---- Param records ---------------------------------------------------------
+
+public sealed record PostListParams;
+
+public sealed record GetPostParams
+{
+    public required string Slug { get; init; }
+}
+
+public sealed record CreatePostParams
+{
+    public required string Title { get; init; }
+    public required string Slug { get; init; }
+    public required JsonElement Blocks { get; init; }
+    public bool Published { get; init; } = false;
+}
+
+public sealed record UpdatePostParams
+{
+    public required Guid Id { get; init; }
+    public string? Title { get; init; }
+    public string? Slug { get; init; }
+    public JsonElement? Blocks { get; init; }
+    public bool? Published { get; init; }
+}
+
+public sealed record DeletePostParams
+{
+    public required Guid Id { get; init; }
+}
+
+public sealed record UploadImageParams
+{
+    public required string DataBase64 { get; init; }
+}
+
+// ---- Response records ------------------------------------------------------
+
+public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author);
+
+public sealed record PostDetail(
+    Guid Id,
+    string Title,
+    string Slug,
+    JsonElement Blocks,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    bool Published,
+    string Author);
+
+public sealed record CreatePostResult(Guid Id, string Slug);
+
+public sealed record ImageUploadResult(string Url);
+
 public class PostMethods
 {
     // Hard limits to keep request bodies bounded. The Kestrel-level cap covers
@@ -23,24 +77,20 @@ public class PostMethods
         _images = images;
     }
 
-    public async Task<object?> List(JsonElement? _, RpcContext __)
+    public async Task<List<PostSummary>> List(PostListParams _, RpcContext __)
     {
-        var posts = await _db.Posts
+        return await _db.Posts
             .Where(p => p.Published)
             .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new { p.Id, p.Title, p.Slug, p.CreatedAt, author = p.Author!.Username })
+            .Select(p => new PostSummary(p.Id, p.Title, p.Slug, p.CreatedAt, p.Author!.Username))
             .ToListAsync();
-        return posts;
     }
 
-    public async Task<object?> Get(JsonElement? @params, RpcContext ctx)
+    public async Task<PostDetail> Get(GetPostParams p, RpcContext ctx)
     {
-        var p = @params ?? throw new InvalidOperationException("params required");
-        var slug = p.GetProperty("slug").GetString() ?? throw new InvalidOperationException("slug required");
-
         var post = await _db.Posts
             .Include(x => x.Author)
-            .FirstOrDefaultAsync(x => x.Slug == slug)
+            .FirstOrDefaultAsync(x => x.Slug == p.Slug)
             ?? throw new InvalidOperationException("Post not found");
 
         // Drafts are only visible to their author. Anyone else gets a not-found
@@ -48,92 +98,83 @@ public class PostMethods
         if (!post.Published && post.AuthorId != ctx.UserId)
             throw new InvalidOperationException("Post not found");
 
-        return new
-        {
+        return new PostDetail(
             post.Id,
             post.Title,
             post.Slug,
-            blocks = JsonDocument.Parse(post.Blocks.RootElement.GetRawText()).RootElement,
+            JsonDocument.Parse(post.Blocks.RootElement.GetRawText()).RootElement,
             post.CreatedAt,
             post.UpdatedAt,
-            published = post.Published,
-            author = post.Author!.Username
-        };
+            post.Published,
+            post.Author!.Username);
     }
 
-    public async Task<object?> Create(JsonElement? @params, RpcContext ctx)
+    public async Task<CreatePostResult> Create(CreatePostParams p, RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
-        var p = @params ?? throw new InvalidOperationException("params required");
 
-        var blocksRaw = p.GetProperty("blocks").GetRawText();
+        var blocksRaw = p.Blocks.GetRawText();
         if (blocksRaw.Length > MaxBlocksDocBytes)
             throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
 
         var post = new Post
         {
-            Title = RequireString(p, "title", maxLen: 200),
-            Slug = NormaliseSlug(RequireString(p, "slug", maxLen: 200)),
+            Title = NonNull(p.Title, "title", 200),
+            Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200)),
             Blocks = JsonDocument.Parse(blocksRaw),
-            Published = p.TryGetProperty("published", out var pub) && pub.GetBoolean(),
+            Published = p.Published,
             AuthorId = userId
         };
         _db.Posts.Add(post);
         await _db.SaveChangesAsync();
-        return new { post.Id, post.Slug };
+        return new CreatePostResult(post.Id, post.Slug);
     }
 
-    public async Task<object?> Update(JsonElement? @params, RpcContext ctx)
+    public async Task<OkResult> Update(UpdatePostParams p, RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
-        var p = @params ?? throw new InvalidOperationException("params required");
-        var id = Guid.Parse(p.GetProperty("id").GetString()!);
 
-        var post = await _db.Posts.FindAsync(id) ?? throw new InvalidOperationException("Post not found");
+        var post = await _db.Posts.FindAsync(p.Id) ?? throw new InvalidOperationException("Post not found");
         if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
-        if (p.TryGetProperty("title", out var t)) post.Title = NonNull(t.GetString(), "title", 200);
-        if (p.TryGetProperty("slug", out var s)) post.Slug = NormaliseSlug(NonNull(s.GetString(), "slug", 200));
-        if (p.TryGetProperty("blocks", out var b))
+        if (p.Title is not null) post.Title = NonNull(p.Title, "title", 200);
+        if (p.Slug is not null) post.Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200));
+        if (p.Blocks is { } blocks)
         {
-            var raw = b.GetRawText();
+            var raw = blocks.GetRawText();
             if (raw.Length > MaxBlocksDocBytes)
                 throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
             post.Blocks = JsonDocument.Parse(raw);
         }
-        if (p.TryGetProperty("published", out var pub)) post.Published = pub.GetBoolean();
+        if (p.Published.HasValue) post.Published = p.Published.Value;
         post.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
-        return new { ok = true };
+        return new OkResult();
     }
 
-    public async Task<object?> Delete(JsonElement? @params, RpcContext ctx)
+    public async Task<OkResult> Delete(DeletePostParams p, RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
-        var p = @params ?? throw new InvalidOperationException("params required");
-        var id = Guid.Parse(p.GetProperty("id").GetString()!);
 
-        var post = await _db.Posts.FindAsync(id) ?? throw new InvalidOperationException("Post not found");
+        var post = await _db.Posts.FindAsync(p.Id) ?? throw new InvalidOperationException("Post not found");
         if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
         _db.Posts.Remove(post);
         await _db.SaveChangesAsync();
-        return new { ok = true };
+        return new OkResult();
     }
 
     /// Accepts base64-encoded image bytes, converts to WebP, returns the public URL.
-    public async Task<object?> UploadImage(JsonElement? @params, RpcContext ctx)
+    public async Task<ImageUploadResult> UploadImage(UploadImageParams p, RpcContext ctx)
     {
         ctx.RequireUserId();
-        var p = @params ?? throw new InvalidOperationException("params required");
-        var b64 = p.GetProperty("dataBase64").GetString() ?? throw new InvalidOperationException("dataBase64 required");
 
-        if (b64.Length > MaxImageBase64Bytes)
+        if (p.DataBase64.Length > MaxImageBase64Bytes)
             throw new InvalidOperationException("Image too large");
 
         byte[] bytes;
-        try { bytes = Convert.FromBase64String(b64); }
+        try { bytes = Convert.FromBase64String(p.DataBase64); }
         catch (FormatException) { throw new InvalidOperationException("Image data is not valid base64"); }
 
         if (bytes.Length > MaxImageRawBytes)
@@ -141,13 +182,7 @@ public class PostMethods
 
         using var ms = new MemoryStream(bytes);
         var url = await _images.ConvertToWebpAsync(ms);
-        return new { url };
-    }
-
-    private static string RequireString(JsonElement p, string name, int maxLen)
-    {
-        var v = p.GetProperty(name).GetString() ?? throw new InvalidOperationException($"{name} required");
-        return NonNull(v, name, maxLen);
+        return new ImageUploadResult(url);
     }
 
     private static string NonNull(string? v, string name, int maxLen)
