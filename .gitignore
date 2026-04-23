@@ -1,0 +1,34 @@
+# Node / Nuxt
+node_modules/
+.nuxt/
+.output/
+.nitro/
+.cache/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.Local.json
+appsettings.Development.local.json
+
+# Media uploads (local dev)
+backend/media/
+backend/src/PortfolioApi/media/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
