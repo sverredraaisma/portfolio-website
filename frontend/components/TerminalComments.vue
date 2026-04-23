@@ -2,7 +2,20 @@
 import { useAuthStore } from '~/stores/auth'
 import { formatTime } from '~/composables/useDate'
 
-type Comment = { id: string; body: string; createdAt: string; author: string }
+type Comment = {
+  id: string
+  body: string
+  createdAt: string
+  author: string
+  authorIsAdmin: boolean
+}
+
+type CommentsPage = {
+  items: Comment[]
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
 
 const props = defineProps<{ postId: string }>()
 const auth = useAuthStore()
@@ -15,7 +28,8 @@ const error = ref('')
 const scroller = ref<HTMLElement | null>(null)
 
 async function load() {
-  comments.value = await rpc.call<Comment[]>('comments.list', { postId: props.postId })
+  const page = await rpc.call<CommentsPage>('comments.list', { postId: props.postId })
+  comments.value = page.items
 }
 
 async function scrollToBottom() {
@@ -52,13 +66,23 @@ async function send() {
     sending.value = false
   }
 }
+
+// Prompt vocab: regular users get a normal $ shell, admins get a root-style
+// `[sudo] user@portfolio:~#` prompt as a visual privilege cue.
+const isAdmin = computed(() => !!auth.user?.isAdmin)
+const promptUser = computed(() => auth.user?.username ?? 'guest')
+const promptHost = computed(() => 'portfolio')
+const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
 </script>
 
 <template>
   <div class="bg-black border border-green-900 rounded p-4 text-sm leading-6 text-green-300">
     <div ref="scroller" class="space-y-1 max-h-80 overflow-y-auto">
       <div v-for="c in comments" :key="c.id">
-        <span class="text-green-600">[{{ formatTime(c.createdAt) }}] {{ c.author }}@portfolio</span>
+        <span class="text-green-600">[{{ formatTime(c.createdAt) }}]</span>
+        <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-green-600'">
+          {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
+        </span>
         <span class="text-zinc-500"> &gt; </span>
         <span class="whitespace-pre-wrap">{{ c.body }}</span>
       </div>
@@ -66,8 +90,8 @@ async function send() {
     </div>
 
     <form @submit.prevent="send" class="mt-3 flex items-center">
-      <span class="mr-2 text-green-500">
-        {{ auth.user?.username ?? 'guest' }}@portfolio:~$
+      <span class="mr-2" :class="isAdmin ? 'text-red-400' : 'text-green-500'">
+        <span v-if="isAdmin" class="text-red-500">[sudo]&nbsp;</span>{{ promptUser }}@{{ promptHost }}:~{{ promptTail }}
       </span>
       <input
         v-model="draft"

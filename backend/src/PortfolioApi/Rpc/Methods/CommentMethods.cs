@@ -27,7 +27,7 @@ public sealed record DeleteCommentParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, string Author);
+public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, string Author, bool AuthorIsAdmin);
 
 public class CommentMethods
 {
@@ -46,7 +46,7 @@ public class CommentMethods
             .OrderBy(c => c.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
-            .Select(c => new CommentDto(c.Id, c.Body, c.CreatedAt, c.Author!.Username))
+            .Select(c => new CommentDto(c.Id, c.Body, c.CreatedAt, c.Author!.Username, c.Author!.IsAdmin))
             .ToListAsync(ctx.CancellationToken);
 
         var hasMore = rows.Count > pageSize;
@@ -73,9 +73,9 @@ public class CommentMethods
         var author = await _db.Users
             .AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => u.Username)
+            .Select(u => new { u.Username, u.IsAdmin })
             .FirstAsync(ctx.CancellationToken);
-        return new CommentDto(c.Id, c.Body, c.CreatedAt, author);
+        return new CommentDto(c.Id, c.Body, c.CreatedAt, author.Username, author.IsAdmin);
     }
 
     public async Task<OkResult> Delete(DeleteCommentParams p, RpcContext ctx)
