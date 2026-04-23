@@ -20,8 +20,17 @@ public class RpcContext
         Guid.TryParse(User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value, out var id)
             ? id : null;
 
+    public bool IsAdmin => User.FindFirst("admin")?.Value == "true";
+
     public Guid RequireUserId() =>
         UserId ?? throw new AuthFailedException("Not signed in");
+
+    public Guid RequireAdmin()
+    {
+        var id = RequireUserId();
+        if (!IsAdmin) throw new AuthFailedException("Admin privileges required");
+        return id;
+    }
 
     /// Aborted when the client disconnects. Pass into EF calls so query work
     /// stops early instead of holding a DB connection until completion.

@@ -140,7 +140,7 @@ public class AuthService : IAuthService
         var (newRaw, _) = await IssueRefreshTokenAsync(stored.UserId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
-        var access = _jwt.CreateAccessToken(stored.User.Id, stored.User.Username);
+        var access = _jwt.CreateAccessToken(stored.User.Id, stored.User.Username, stored.User.IsAdmin);
         return (new AuthTokens(access, newRaw), stored.User);
     }
 

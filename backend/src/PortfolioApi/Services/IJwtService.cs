@@ -4,7 +4,7 @@ namespace PortfolioApi.Services;
 
 public interface IJwtService
 {
-    string CreateAccessToken(Guid userId, string username);
+    string CreateAccessToken(Guid userId, string username, bool isAdmin);
     string CreateEmailVerifyToken(Guid userId, string email);
 
     /// Returns null if the token is invalid, expired, or carries the wrong purpose claim.

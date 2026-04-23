@@ -2,7 +2,7 @@
 import PostBuilder from '~/components/PostBuilder.vue'
 import type { PostDocument } from '~/types/blocks'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({ middleware: 'admin' })
 
 const router = useRouter()
 const rpc = useRpc()

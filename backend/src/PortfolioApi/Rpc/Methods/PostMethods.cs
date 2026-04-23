@@ -132,7 +132,8 @@ public class PostMethods
 
     public async Task<CreatePostResult> Create(CreatePostParams p, RpcContext ctx)
     {
-        var userId = ctx.RequireUserId();
+        // Posts are admin-only — non-admin authenticated users (commenters) get 401.
+        var userId = ctx.RequireAdmin();
 
         var blocksRaw = p.Blocks.GetRawText();
         if (blocksRaw.Length > MaxBlocksDocBytes)
@@ -153,7 +154,7 @@ public class PostMethods
 
     public async Task<OkResult> Update(UpdatePostParams p, RpcContext ctx)
     {
-        var userId = ctx.RequireUserId();
+        var userId = ctx.RequireAdmin();
 
         // Don't AsNoTracking here — we need EF to track the entity to persist edits.
         var post = await _db.Posts.FindAsync(new object?[] { p.Id }, ctx.CancellationToken)
@@ -178,7 +179,7 @@ public class PostMethods
 
     public async Task<OkResult> Delete(DeletePostParams p, RpcContext ctx)
     {
-        var userId = ctx.RequireUserId();
+        var userId = ctx.RequireAdmin();
 
         var post = await _db.Posts.FindAsync(new object?[] { p.Id }, ctx.CancellationToken)
             ?? throw new InvalidOperationException("Post not found");
@@ -192,7 +193,7 @@ public class PostMethods
     /// Accepts base64-encoded image bytes, converts to WebP, returns the public URL.
     public async Task<ImageUploadResult> UploadImage(UploadImageParams p, RpcContext ctx)
     {
-        ctx.RequireUserId();
+        ctx.RequireAdmin();
 
         if (p.DataBase64.Length > MaxImageBase64Bytes)
             throw new InvalidOperationException("Image too large");

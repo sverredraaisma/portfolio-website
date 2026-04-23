@@ -19,7 +19,7 @@ async function logout() {
       <NuxtLink to="/" class="text-green-400 font-bold tracking-widest">~/sverre</NuxtLink>
       <nav class="flex gap-4 text-sm">
         <NuxtLink to="/posts" class="hover:text-green-400">posts</NuxtLink>
-        <NuxtLink v-if="auth.isAuthenticated" to="/posts/new" class="hover:text-green-400">new</NuxtLink>
+        <NuxtLink v-if="auth.user?.isAdmin" to="/posts/new" class="hover:text-green-400">new</NuxtLink>
         <template v-if="auth.isAuthenticated">
           <span class="text-zinc-500">{{ auth.user?.username }}</span>
           <button class="hover:text-red-400" @click="logout">logout</button>

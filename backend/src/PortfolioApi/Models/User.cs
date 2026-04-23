@@ -13,6 +13,10 @@ public class User
     public DateTime? EmailVerifiedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// Admin users are the only ones who can create/edit/delete posts.
+    /// Set on the seeded owner; manually flipped via SQL or a follow-up admin tool.
+    public bool IsAdmin { get; set; }
+
     public List<Post> Posts { get; set; } = new();
     public List<Comment> Comments { get; set; } = new();
 }

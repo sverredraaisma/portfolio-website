@@ -19,12 +19,13 @@ public class JwtService : IJwtService
         _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opt.Key));
     }
 
-    public string CreateAccessToken(Guid userId, string username)
+    public string CreateAccessToken(Guid userId, string username, bool isAdmin)
     {
         return Create(new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new Claim("username", username),
+            new Claim("admin", isAdmin ? "true" : "false"),
             new Claim("purpose", JwtPurpose.Access)
         }, TimeSpan.FromMinutes(_opt.AccessTokenMinutes));
     }

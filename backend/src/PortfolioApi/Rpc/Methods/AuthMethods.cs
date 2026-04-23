@@ -37,7 +37,7 @@ public sealed record VerifyEmailParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record UserDto(Guid Id, string Username, string Email, bool EmailVerified);
+public sealed record UserDto(Guid Id, string Username, string Email, bool EmailVerified, bool IsAdmin);
 public sealed record RegisterResult(Guid Id, string Username, bool EmailVerified);
 public sealed record AuthSuccess(string AccessToken, string RefreshToken, UserDto User);
 public sealed record VerifyResult(bool Verified);
@@ -75,13 +75,13 @@ public class AuthMethods
             throw new InvalidOperationException("Email not verified");
         }
 
-        var access = _jwt.CreateAccessToken(user.Id, user.Username);
+        var access = _jwt.CreateAccessToken(user.Id, user.Username, user.IsAdmin);
         var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id, ctx.CancellationToken);
 
         return new AuthSuccess(
             access,
             refresh,
-            new UserDto(user.Id, user.Username, user.Email, EmailVerified: true));
+            new UserDto(user.Id, user.Username, user.Email, EmailVerified: true, user.IsAdmin));
     }
 
     public async Task<AuthSuccess> Refresh(RefreshParams p, RpcContext ctx)
@@ -90,7 +90,7 @@ public class AuthMethods
         return new AuthSuccess(
             tokens.AccessToken,
             tokens.RefreshToken,
-            new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null));
+            new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null, user.IsAdmin));
     }
 
     public async Task<OkResult> Logout(LogoutParams p, RpcContext ctx)
@@ -110,6 +110,6 @@ public class AuthMethods
         var id = ctx.RequireUserId();
         var user = await _db.Users.FindAsync(new object?[] { id }, ctx.CancellationToken)
             ?? throw new AuthFailedException("Unknown user");
-        return new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null);
+        return new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null, user.IsAdmin);
     }
 }
