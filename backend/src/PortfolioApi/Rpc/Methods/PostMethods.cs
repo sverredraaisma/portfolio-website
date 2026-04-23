@@ -8,6 +8,12 @@ namespace PortfolioApi.Rpc.Methods;
 
 public class PostMethods
 {
+    // Hard limits to keep request bodies bounded. The Kestrel-level cap covers
+    // the whole RPC body; these protect specific fields.
+    private const int MaxBlocksDocBytes = 256 * 1024;       // 256 KiB of JSON
+    private const int MaxImageBase64Bytes = 8 * 1024 * 1024; // 8 MiB encoded
+    private const int MaxImageRawBytes = 6 * 1024 * 1024;    // ~6 MiB decoded
+
     private readonly AppDbContext _db;
     private readonly IImageService _images;
 
@@ -27,7 +33,7 @@ public class PostMethods
         return posts;
     }
 
-    public async Task<object?> Get(JsonElement? @params, RpcContext _)
+    public async Task<object?> Get(JsonElement? @params, RpcContext ctx)
     {
         var p = @params ?? throw new InvalidOperationException("params required");
         var slug = p.GetProperty("slug").GetString() ?? throw new InvalidOperationException("slug required");
@@ -37,6 +43,11 @@ public class PostMethods
             .FirstOrDefaultAsync(x => x.Slug == slug)
             ?? throw new InvalidOperationException("Post not found");
 
+        // Drafts are only visible to their author. Anyone else gets a not-found
+        // response — same shape as a non-existent slug, no enumeration.
+        if (!post.Published && post.AuthorId != ctx.UserId)
+            throw new InvalidOperationException("Post not found");
+
         return new
         {
             post.Id,
@@ -45,6 +56,7 @@ public class PostMethods
             blocks = JsonDocument.Parse(post.Blocks.RootElement.GetRawText()).RootElement,
             post.CreatedAt,
             post.UpdatedAt,
+            published = post.Published,
             author = post.Author!.Username
         };
     }
@@ -54,11 +66,15 @@ public class PostMethods
         var userId = ctx.RequireUserId();
         var p = @params ?? throw new InvalidOperationException("params required");
 
+        var blocksRaw = p.GetProperty("blocks").GetRawText();
+        if (blocksRaw.Length > MaxBlocksDocBytes)
+            throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
+
         var post = new Post
         {
-            Title = p.GetProperty("title").GetString() ?? throw new InvalidOperationException("title required"),
-            Slug = p.GetProperty("slug").GetString() ?? throw new InvalidOperationException("slug required"),
-            Blocks = JsonDocument.Parse(p.GetProperty("blocks").GetRawText()),
+            Title = RequireString(p, "title", maxLen: 200),
+            Slug = NormaliseSlug(RequireString(p, "slug", maxLen: 200)),
+            Blocks = JsonDocument.Parse(blocksRaw),
             Published = p.TryGetProperty("published", out var pub) && pub.GetBoolean(),
             AuthorId = userId
         };
@@ -74,11 +90,17 @@ public class PostMethods
         var id = Guid.Parse(p.GetProperty("id").GetString()!);
 
         var post = await _db.Posts.FindAsync(id) ?? throw new InvalidOperationException("Post not found");
-        if (post.AuthorId != userId) throw new UnauthorizedAccessException("Not your post");
+        if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
-        if (p.TryGetProperty("title", out var t)) post.Title = t.GetString()!;
-        if (p.TryGetProperty("slug", out var s)) post.Slug = s.GetString()!;
-        if (p.TryGetProperty("blocks", out var b)) post.Blocks = JsonDocument.Parse(b.GetRawText());
+        if (p.TryGetProperty("title", out var t)) post.Title = NonNull(t.GetString(), "title", 200);
+        if (p.TryGetProperty("slug", out var s)) post.Slug = NormaliseSlug(NonNull(s.GetString(), "slug", 200));
+        if (p.TryGetProperty("blocks", out var b))
+        {
+            var raw = b.GetRawText();
+            if (raw.Length > MaxBlocksDocBytes)
+                throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
+            post.Blocks = JsonDocument.Parse(raw);
+        }
         if (p.TryGetProperty("published", out var pub)) post.Published = pub.GetBoolean();
         post.UpdatedAt = DateTime.UtcNow;
 
@@ -93,7 +115,7 @@ public class PostMethods
         var id = Guid.Parse(p.GetProperty("id").GetString()!);
 
         var post = await _db.Posts.FindAsync(id) ?? throw new InvalidOperationException("Post not found");
-        if (post.AuthorId != userId) throw new UnauthorizedAccessException("Not your post");
+        if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
         _db.Posts.Remove(post);
         await _db.SaveChangesAsync();
@@ -107,9 +129,44 @@ public class PostMethods
         var p = @params ?? throw new InvalidOperationException("params required");
         var b64 = p.GetProperty("dataBase64").GetString() ?? throw new InvalidOperationException("dataBase64 required");
 
-        var bytes = Convert.FromBase64String(b64);
+        if (b64.Length > MaxImageBase64Bytes)
+            throw new InvalidOperationException("Image too large");
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(b64); }
+        catch (FormatException) { throw new InvalidOperationException("Image data is not valid base64"); }
+
+        if (bytes.Length > MaxImageRawBytes)
+            throw new InvalidOperationException("Image too large");
+
         using var ms = new MemoryStream(bytes);
         var url = await _images.ConvertToWebpAsync(ms);
         return new { url };
+    }
+
+    private static string RequireString(JsonElement p, string name, int maxLen)
+    {
+        var v = p.GetProperty(name).GetString() ?? throw new InvalidOperationException($"{name} required");
+        return NonNull(v, name, maxLen);
+    }
+
+    private static string NonNull(string? v, string name, int maxLen)
+    {
+        if (string.IsNullOrWhiteSpace(v)) throw new InvalidOperationException($"{name} required");
+        if (v.Length > maxLen) throw new InvalidOperationException($"{name} too long (max {maxLen})");
+        return v;
+    }
+
+    // Slugs feed the URL — keep them to a safe character set.
+    private static string NormaliseSlug(string s)
+    {
+        var slug = new string(s.ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '-')
+            .ToArray())
+            .Trim('-');
+        if (slug.Length == 0) throw new InvalidOperationException("slug must contain letters or digits");
+        // Avoid colliding with the file-routed /posts/new editor.
+        if (slug == "new") throw new InvalidOperationException("slug 'new' is reserved");
+        return slug;
     }
 }
