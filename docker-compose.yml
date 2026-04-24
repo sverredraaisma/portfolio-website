@@ -50,6 +50,10 @@ services:
       Email__From: ${SMTP_FROM:-noreply@example.com}
     volumes:
       - backend_media:/app/media
+      # Falcon-512 signing keypair, generated on first boot. Persisted so
+      # signatures survive container restarts and so the public key stays
+      # stable for verifiers.
+      - backend_keys:/app/keys
 
   frontend:
     build:
@@ -90,3 +94,4 @@ services:
 volumes:
   postgres_data:
   backend_media:
+  backend_keys:

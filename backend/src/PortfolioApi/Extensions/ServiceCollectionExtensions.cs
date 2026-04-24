@@ -35,6 +35,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<RateLimitingOptions>()
             .Bind(cfg.GetSection(RateLimitingOptions.Section));
 
+        services.AddOptions<SigningOptions>()
+            .Bind(cfg.GetSection(SigningOptions.Section));
+
         return services;
     }
 
@@ -46,12 +49,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJwtService, JwtService>();
         services.AddSingleton<IEmailService, EmailService>();
         services.AddSingleton<IImageService, ImageService>();
+        // Singleton: the Falcon keypair is loaded once on first use; subsequent
+        // signs/verifies share the same parameters.
+        services.AddSingleton<ISigningService, FalconSigningService>();
         services.AddScoped<IAuthService, AuthService>();
 
         services.AddScoped<RpcRouter>();
         services.AddScoped<AuthMethods>();
         services.AddScoped<PostMethods>();
         services.AddScoped<CommentMethods>();
+        services.AddScoped<SigningMethods>();
 
         return services;
     }
