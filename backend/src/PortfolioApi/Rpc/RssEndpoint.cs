@@ -8,12 +8,14 @@ using PortfolioApi.Data;
 
 namespace PortfolioApi.Rpc;
 
-/// RSS 2.0 feed of published posts. Lives outside the RPC router because feed
-/// readers expect a plain GET against an .xml URL — a JSON-RPC endpoint won't
-/// do. Bounded to the most recent 50 posts so the body never gets unwieldy.
+/// RSS 2.0 feed, sitemap, and robots.txt for published posts. All three live
+/// outside the RPC router because crawlers and feed readers expect plain GETs
+/// against well-known URLs. The feed and sitemap are bounded to the most
+/// recent 200 / 50 posts so the bodies never get unwieldy.
 public static class RssEndpoint
 {
     private const int MaxItems = 50;
+    private const int MaxSitemapItems = 1000;
 
     public static IEndpointRouteBuilder MapRss(this IEndpointRouteBuilder app)
     {
@@ -74,6 +76,78 @@ public static class RssEndpoint
             // hammering the database.
             http.Response.Headers["Cache-Control"] = "public, max-age=3600";
             await http.Response.WriteAsync(xml.ToString(), http.RequestAborted);
+        });
+
+        app.MapGet("/sitemap.xml", async (HttpContext http, AppDbContext db) =>
+        {
+            var origin = http.Request.Scheme + "://" + http.Request.Host;
+
+            var posts = await db.Posts
+                .AsNoTracking()
+                .Where(p => p.Published)
+                .OrderByDescending(p => p.UpdatedAt)
+                .Take(MaxSitemapItems)
+                .Select(p => new { p.Slug, p.UpdatedAt })
+                .ToListAsync(http.RequestAborted);
+
+            var xml = new StringBuilder();
+            using (var writer = XmlWriter.Create(xml, new XmlWriterSettings
+                   {
+                       Indent = false,
+                       Encoding = new UTF8Encoding(false),
+                       OmitXmlDeclaration = false,
+                       Async = false
+                   }))
+            {
+                writer.WriteStartDocument();
+                writer.WriteStartElement("urlset", "http://www.sitemaps.org/schemas/sitemap/0.9");
+
+                // Static, always-public routes go first.
+                static void WriteUrl(XmlWriter w, string loc, DateTime lastmod, string changefreq, string priority)
+                {
+                    w.WriteStartElement("url");
+                    w.WriteElementString("loc", loc);
+                    w.WriteElementString("lastmod", lastmod.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                    w.WriteElementString("changefreq", changefreq);
+                    w.WriteElementString("priority", priority);
+                    w.WriteEndElement();
+                }
+
+                var today = DateTime.UtcNow;
+                WriteUrl(writer, $"{origin}/", today, "weekly", "1.0");
+                WriteUrl(writer, $"{origin}/posts", today, "daily", "0.9");
+                WriteUrl(writer, $"{origin}/verify-statement", today, "yearly", "0.4");
+                WriteUrl(writer, $"{origin}/privacy", today, "yearly", "0.4");
+
+                foreach (var p in posts)
+                {
+                    WriteUrl(writer, $"{origin}/posts/{p.Slug}", p.UpdatedAt, "monthly", "0.8");
+                }
+
+                writer.WriteEndElement(); // urlset
+                writer.WriteEndDocument();
+            }
+
+            http.Response.ContentType = "application/xml; charset=utf-8";
+            http.Response.Headers["Cache-Control"] = "public, max-age=3600";
+            await http.Response.WriteAsync(xml.ToString(), http.RequestAborted);
+        });
+
+        app.MapGet("/robots.txt", (HttpContext http) =>
+        {
+            var origin = http.Request.Scheme + "://" + http.Request.Host;
+            // Permissive on the public surface; admin and account flows are
+            // either gated by JS-only middleware or behind login, so excluding
+            // them here is purely a hint to well-behaved crawlers.
+            var body =
+                "User-agent: *\n" +
+                "Disallow: /admin/\n" +
+                "Disallow: /account\n" +
+                "Disallow: /sign\n" +
+                $"Sitemap: {origin}/sitemap.xml\n";
+            http.Response.ContentType = "text/plain; charset=utf-8";
+            http.Response.Headers["Cache-Control"] = "public, max-age=86400";
+            return http.Response.WriteAsync(body, http.RequestAborted);
         });
 
         return app;
