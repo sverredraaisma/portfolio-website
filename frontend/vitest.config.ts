@@ -14,7 +14,10 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
-    globals: false
+    globals: false,
+    // Loaded once per worker before any test file runs. Installs the Nuxt
+    // auto-import globals (ref, useRpc, etc.) on globalThis.
+    setupFiles: ['./tests/useStateShim.ts', './tests/nuxtAutoImports.ts']
   },
   resolve: {
     alias: {
