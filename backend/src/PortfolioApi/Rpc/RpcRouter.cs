@@ -54,6 +54,13 @@ public class RpcRouter
         Register("auth.totpConfirm", RpcHandlers.Typed<TotpCodeParams, TotpConfirmResult>(auth.TotpConfirm));
         Register("auth.totpDisable", RpcHandlers.Typed<TotpCodeParams, OkResult>(auth.TotpDisable));
         Register("auth.totpRegenerateRecoveryCodes", RpcHandlers.Typed<RecoveryCodesDto>(auth.TotpRegenerateRecoveryCodes));
+        Register("auth.passkeyRegisterStart", RpcHandlers.Typed<PasskeyOptionsDto>(auth.PasskeyRegisterStart));
+        Register("auth.passkeyRegisterFinish", RpcHandlers.Typed<PasskeyRegisterFinishParams, PasskeyAddedDto>(auth.PasskeyRegisterFinish));
+        Register("auth.passkeyLoginStart", RpcHandlers.Typed<PasskeyLoginStartParams, PasskeyOptionsDto>(auth.PasskeyLoginStart));
+        Register("auth.passkeyLoginFinish", RpcHandlers.Typed<PasskeyLoginFinishParams, LoginResponse>(auth.PasskeyLoginFinish));
+        Register("auth.passkeyList", RpcHandlers.Typed<IReadOnlyList<PasskeyDto>>(auth.PasskeyList));
+        Register("auth.passkeyDelete", RpcHandlers.Typed<PasskeyDeleteParams, OkResult>(auth.PasskeyDelete));
+        Register("auth.passkeyRename", RpcHandlers.Typed<PasskeyRenameParams, OkResult>(auth.PasskeyRename));
         Register("auth.refresh", RpcHandlers.Typed<RefreshParams, AuthSuccess>(auth.Refresh));
         Register("auth.logout", RpcHandlers.Typed<LogoutParams, OkResult>(auth.Logout));
         Register("auth.verifyEmail", RpcHandlers.Typed<VerifyEmailParams, VerifyResult>(auth.VerifyEmail));

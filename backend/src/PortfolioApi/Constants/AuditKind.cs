@@ -11,4 +11,6 @@ public static class AuditKind
     public const string TotpDisabled = "totp.disabled";
     public const string RecoveryCodesRegenerated = "totp.recoveryCodesRegenerated";
     public const string SessionsRevoked = "sessions.revoked";
+    public const string PasskeyAdded = "passkey.added";
+    public const string PasskeyRemoved = "passkey.removed";
 }

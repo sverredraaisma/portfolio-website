@@ -98,16 +98,37 @@ public sealed record RecoveryCodesDto(IReadOnlyList<string> Codes);
 
 public sealed record TotpConfirmResult(IReadOnlyList<string> RecoveryCodes);
 
+public sealed record PasskeyRegisterStartParams { public string? Username { get; init; } }
+public sealed record PasskeyRegisterFinishParams
+{
+    public required string SessionId { get; init; }
+    public required string AttestationJson { get; init; }
+    public string? Name { get; init; }
+}
+public sealed record PasskeyLoginStartParams { public string? Username { get; init; } }
+public sealed record PasskeyLoginFinishParams
+{
+    public required string SessionId { get; init; }
+    public required string AssertionJson { get; init; }
+}
+public sealed record PasskeyDeleteParams { public required Guid Id { get; init; } }
+public sealed record PasskeyRenameParams { public required Guid Id { get; init; } public required string Name { get; init; } }
+
+public sealed record PasskeyOptionsDto(string OptionsJson, string SessionId);
+public sealed record PasskeyAddedDto(Guid Id, string Name, DateTime CreatedAt);
+
 public class AuthMethods
 {
     private readonly IAuthService _auth;
     private readonly IJwtService _jwt;
+    private readonly IPasskeyService _passkeys;
     private readonly AppDbContext _db;
 
-    public AuthMethods(IAuthService auth, IJwtService jwt, AppDbContext db)
+    public AuthMethods(IAuthService auth, IJwtService jwt, IPasskeyService passkeys, AppDbContext db)
     {
         _auth = auth;
         _jwt = jwt;
+        _passkeys = passkeys;
         _db = db;
     }
 
@@ -271,5 +292,60 @@ public class AuthMethods
         var user = await _db.Users.FindAsync(new object?[] { id }, ctx.CancellationToken)
             ?? throw new AuthFailedException("Unknown user");
         return new UserDto(user.Id, user.Username, user.Email, EmailVerified: user.EmailVerifiedAt is not null, user.IsAdmin);
+    }
+
+    // ---- Passkey RPCs ------------------------------------------------------
+
+    public async Task<PasskeyOptionsDto> PasskeyRegisterStart(RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var user = await _db.Users.FindAsync(new object?[] { userId }, ctx.CancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+        var start = await _passkeys.StartRegistrationAsync(user, ctx.CancellationToken);
+        return new PasskeyOptionsDto(start.OptionsJson, start.SessionId);
+    }
+
+    public async Task<PasskeyAddedDto> PasskeyRegisterFinish(PasskeyRegisterFinishParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var added = await _passkeys.FinishRegistrationAsync(userId, p.SessionId, p.AttestationJson, p.Name ?? "", ctx.CancellationToken);
+        return new PasskeyAddedDto(added.Id, added.Name, added.CreatedAt);
+    }
+
+    public async Task<PasskeyOptionsDto> PasskeyLoginStart(PasskeyLoginStartParams p, RpcContext ctx)
+    {
+        var start = await _passkeys.StartAssertionAsync(p.Username, ctx.CancellationToken);
+        return new PasskeyOptionsDto(start.OptionsJson, start.SessionId);
+    }
+
+    /// Returns a full LoginResponse — passkey is a complete authenticator,
+    /// no second factor needed. Falls back to the standard email-verified
+    /// check.
+    public async Task<LoginResponse> PasskeyLoginFinish(PasskeyLoginFinishParams p, RpcContext ctx)
+    {
+        var user = await _passkeys.FinishAssertionAsync(p.SessionId, p.AssertionJson, ctx.CancellationToken);
+        if (user.EmailVerifiedAt is null)
+            throw new InvalidOperationException("Email not verified");
+        return new LoginResponse(await IssueSession(user, ctx), null);
+    }
+
+    public async Task<IReadOnlyList<PasskeyDto>> PasskeyList(RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        return await _passkeys.ListAsync(userId, ctx.CancellationToken);
+    }
+
+    public async Task<OkResult> PasskeyDelete(PasskeyDeleteParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _passkeys.DeleteAsync(userId, p.Id, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> PasskeyRename(PasskeyRenameParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _passkeys.RenameAsync(userId, p.Id, p.Name, ctx.CancellationToken);
+        return new OkResult();
     }
 }

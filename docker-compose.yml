@@ -49,6 +49,13 @@ services:
       Email__SmtpHost: ${SMTP_HOST:-mailpit}
       Email__SmtpPort: ${SMTP_PORT:-1025}
       Email__From: ${SMTP_FROM:-noreply@example.com}
+      # WebAuthn relying-party id is the registrable domain only (no scheme,
+      # no port). For dev, the default 'localhost' works because the browser
+      # treats it specially. For production set both PASSKEY_RP_ID and
+      # PASSKEY_ORIGINS to match your hostname.
+      Passkey__RpId: ${PASSKEY_RP_ID:-localhost}
+      Passkey__RpName: ${PASSKEY_RP_NAME:-sverre.dev}
+      Passkey__Origins__0: ${PUBLIC_ORIGIN:-http://localhost}
     volumes:
       - backend_media:/app/media
       # Falcon-512 signing keypair, generated on first boot. Persisted so

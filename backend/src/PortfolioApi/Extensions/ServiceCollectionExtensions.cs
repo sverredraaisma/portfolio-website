@@ -38,6 +38,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<SigningOptions>()
             .Bind(cfg.GetSection(SigningOptions.Section));
 
+        services.AddOptions<PasskeyOptions>()
+            .Bind(cfg.GetSection(PasskeyOptions.Section));
+
         return services;
     }
 
@@ -55,6 +58,24 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITotpService, TotpService>();
         // Singleton: per-username failure counter is process-wide state.
         services.AddSingleton<ILoginThrottle, LoginThrottle>();
+
+        // Passkey / WebAuthn (Fido2NetLib). The library wants a Fido2Configuration
+        // up-front; it has no IOptions integration, so we build it from the
+        // bound PasskeyOptions before resolving the singleton.
+        services.AddMemoryCache();
+        services.AddSingleton(sp =>
+        {
+            var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PasskeyOptions>>().Value;
+            return new Fido2NetLib.Fido2(new Fido2NetLib.Fido2Configuration
+            {
+                ServerDomain = opt.RpId,
+                ServerName = opt.RpName,
+                Origins = new HashSet<string>(opt.Origins),
+                TimestampDriftTolerance = 300_000
+            });
+        });
+        services.AddSingleton<Fido2NetLib.IFido2>(sp => sp.GetRequiredService<Fido2NetLib.Fido2>());
+        services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IAuditService, AuditService>();

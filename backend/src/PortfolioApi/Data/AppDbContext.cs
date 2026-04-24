@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<Passkey> Passkeys => Set<Passkey>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -83,6 +84,17 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Passkey>(e =>
+        {
+            // Lookup by credential id at the assertion step.
+            e.HasIndex(p => p.CredentialId).IsUnique();
+            e.Property(p => p.Name).HasMaxLength(64);
+            e.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
