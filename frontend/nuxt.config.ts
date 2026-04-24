@@ -17,6 +17,10 @@ export default defineNuxtConfig({
       title: 'Portfolio',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+      ],
+      link: [
+        // Feed readers auto-discover /rss.xml from this <link>.
+        { rel: 'alternate', type: 'application/rss+xml', title: 'sverre.dev posts', href: '/rss.xml' }
       ]
     }
   }

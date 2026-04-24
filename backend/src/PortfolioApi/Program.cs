@@ -102,6 +102,10 @@ app.UseAuthorization();
 // Single RPC entrypoint. Rate limited by the global limiter above.
 app.MapPost("/rpc", async (HttpContext ctx, RpcRouter router) => await router.HandleAsync(ctx));
 
+// Public RSS feed of published posts (subscribe-without-an-account). Served
+// outside the RPC router because feed readers expect a plain XML GET.
+app.MapRss();
+
 // Static media (WebP images). Read MediaRoot off IImageService so the path is
 // single-sourced — the service has already created the directory.
 var images = app.Services.GetRequiredService<IImageService>();

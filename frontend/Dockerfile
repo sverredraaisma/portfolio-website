@@ -2,11 +2,16 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund
+# Use pnpm to honour pnpm-lock.yaml — npm and pnpm produce different lock
+# formats, and the project lockfile is pnpm's. Falls back to a fresh resolve
+# if the lockfile is missing.
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # Runtime stage
 FROM node:20-alpine AS runtime
