@@ -103,8 +103,28 @@ app.Use(async (ctx, next) =>
 
 // Liveness probe. Cheap, no DB hit — answers "is the process up?". Compose
 // healthchecks and external monitors can poll this without rate limits or
-// auth in their way.
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+// auth in their way. /health is kept as an alias for backward compatibility.
+app.MapGet("/health",      () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
+
+// Readiness probe. Verifies the DB is reachable so an orchestrator can
+// withhold traffic until the backing service is actually usable. Returns
+// 503 if the connection check fails — *not* 500, so a load balancer
+// understands the instance should be excluded but doesn't need restarting.
+app.MapGet("/health/ready", async (PortfolioApi.Data.AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        var ok = await db.Database.CanConnectAsync(ct);
+        return ok
+            ? Results.Ok(new { status = "ready" })
+            : Results.Json(new { status = "db_unavailable" }, statusCode: 503);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { status = "db_error", error = ex.GetType().Name }, statusCode: 503);
+    }
+});
 
 app.UseRateLimiter();
 app.UseCors();
@@ -133,3 +153,9 @@ app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 });
 
 app.Run();
+
+// Top-level statements compile into an implicit `internal Program` class.
+// Re-declare it as public partial so WebApplicationFactory<Program> in the
+// test project can find a usable type symbol — Microsoft's standard pattern
+// for ASP.NET Core 6+ in-process integration tests.
+public partial class Program { }

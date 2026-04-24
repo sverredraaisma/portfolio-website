@@ -12,21 +12,29 @@ public static class RpcHandlers
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     /// Adapter for a handler that takes typed params + RpcContext.
-    /// Throws InvalidOperationException("params required") when the JsonElement
-    /// is missing or null. JsonException (e.g. missing required property) is
-    /// rethrown as InvalidOperationException so the router maps it to 400.
+    /// When the JsonElement is missing or null, attempts to deserialise an
+    /// empty object — that succeeds when every property on TParams has a
+    /// default, and fails with a clean validation error otherwise. JsonException
+    /// (e.g. missing required property) is rethrown as InvalidOperationException
+    /// so the router maps it to 400.
     public static RpcHandler Typed<TParams, TResult>(Func<TParams, RpcContext, Task<TResult>> impl)
         where TParams : class
     {
         return async (raw, ctx) =>
         {
+            // Treat omitted / null params as "{}". Methods whose params record
+            // requires fields will still error with a clear "Property '…' is
+            // required" message from System.Text.Json.
+            JsonElement element;
             if (raw is null || raw.Value.ValueKind == JsonValueKind.Null || raw.Value.ValueKind == JsonValueKind.Undefined)
-                throw new InvalidOperationException("params required");
+                element = JsonDocument.Parse("{}").RootElement;
+            else
+                element = raw.Value;
 
             TParams parsed;
             try
             {
-                parsed = raw.Value.Deserialize<TParams>(JsonOpts)
+                parsed = element.Deserialize<TParams>(JsonOpts)
                     ?? throw new InvalidOperationException("params required");
             }
             catch (JsonException jsonEx)

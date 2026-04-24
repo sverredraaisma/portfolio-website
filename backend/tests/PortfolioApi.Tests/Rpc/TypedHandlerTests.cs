@@ -28,14 +28,31 @@ public class TypedHandlerTests
     }
 
     [Fact]
-    public async Task Typed_throws_InvalidOperation_when_params_are_missing()
+    public async Task Typed_treats_missing_params_as_empty_object_and_validates_required_fields()
     {
+        // Bar is required → missing-property error, not "params required".
+        // The previous behaviour (immediate "params required") rejected
+        // perfectly-valid calls to methods whose every property had a
+        // default (e.g. posts.list with no params).
         var handler = RpcHandlers.Typed<FooParams, FooResult>((_, _) => throw new Exception("should not run"));
 
         var act = async () => await handler(null, Ctx());
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("params required");
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Bar*");
     }
+
+    [Fact]
+    public async Task Typed_with_all_optional_params_succeeds_when_called_with_no_payload()
+    {
+        var handler = RpcHandlers.Typed<AllOptionalParams, FooResult>((_, _) =>
+            Task.FromResult(new FooResult("ran")));
+
+        var result = (FooResult)(await handler(null, Ctx()))!;
+
+        result.Echo.Should().Be("ran");
+    }
+
+    private sealed record AllOptionalParams { public int Page { get; init; } = 1; }
 
     [Fact]
     public async Task Typed_throws_InvalidOperation_when_a_required_property_is_missing()
