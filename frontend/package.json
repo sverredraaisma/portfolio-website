@@ -14,7 +14,9 @@
     "vue": "^3.5.0",
     "vue-router": "^4.4.0",
     "pinia": "^2.2.0",
-    "@pinia/nuxt": "^0.5.4"
+    "@pinia/nuxt": "^0.5.4",
+    "marked": "^14.1.0",
+    "isomorphic-dompurify": "^2.16.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

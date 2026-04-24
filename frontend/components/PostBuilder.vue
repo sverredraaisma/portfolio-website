@@ -14,6 +14,7 @@ function add(type: Block['type']) {
   const next: Block =
     type === 'header' ? { id: newId(), type: 'header', data: { text: '', level: 2 } } :
     type === 'text'   ? { id: newId(), type: 'text',   data: { markdown: '' } } :
+    type === 'code'   ? { id: newId(), type: 'code',   data: { code: '', language: '' } } :
                         { id: newId(), type: 'image',  data: { src: '', alt: '' } }
   update([...props.modelValue.blocks, next])
 }
@@ -54,9 +55,10 @@ function move(id: string, dir: -1 | 1) {
       />
     </div>
 
-    <div class="flex gap-2 text-sm">
+    <div class="flex gap-2 text-sm flex-wrap">
       <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('header')">+ header</button>
       <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('text')">+ text</button>
+      <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('code')">+ code</button>
       <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('image')">+ image</button>
     </div>
   </div>

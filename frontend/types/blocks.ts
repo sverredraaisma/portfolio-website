@@ -7,8 +7,9 @@ export type BlockBase<TType extends string, TData> = {
 export type HeaderBlock = BlockBase<'header', { text: string; level: 1 | 2 | 3 }>
 export type TextBlock = BlockBase<'text', { markdown: string }>
 export type ImageBlock = BlockBase<'image', { src: string; alt: string }>
+export type CodeBlock = BlockBase<'code', { code: string; language: string }>
 
-export type Block = HeaderBlock | TextBlock | ImageBlock
+export type Block = HeaderBlock | TextBlock | ImageBlock | CodeBlock
 
 export type PostDocument = {
   blocks: Block[]
