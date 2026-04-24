@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     public DbSet<Post> Posts => Set<Post>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -59,6 +61,28 @@ public class AppDbContext : DbContext
             e.HasOne(t => t.User)
                 .WithMany()
                 .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<RecoveryCode>(e =>
+        {
+            // Lookup by hash to verify a code on login.
+            e.HasIndex(r => r.CodeHash);
+            e.HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AuditEvent>(e =>
+        {
+            e.Property(x => x.Kind).HasMaxLength(64);
+            e.Property(x => x.Detail).HasMaxLength(500);
+            // List by user, newest first — covers the only access pattern.
+            e.HasIndex(x => new { x.UserId, x.At });
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

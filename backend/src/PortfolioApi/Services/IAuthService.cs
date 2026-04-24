@@ -28,7 +28,9 @@ public interface IAuthService
     /// hand the token back via CompleteTotpAsync alongside the user's code.
     Task<LoginStageResult> BeginLoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default);
 
-    /// Validates a (challenge, code) pair from the second login step.
+    /// Validates a (challenge, code) pair from the second login step. The code
+    /// can be either a 6-digit TOTP code or one of the user's recovery codes;
+    /// recovery codes are single-use and consumed on success.
     /// Returns the user on success; throws AuthFailedException on bad/expired
     /// challenge or wrong code.
     Task<User> CompleteTotpAsync(string challengeToken, string code, CancellationToken cancellationToken = default);
@@ -47,6 +49,16 @@ public interface IAuthService
     /// Disables TOTP. Requires a current valid code so an attacker holding a
     /// stolen access token can't simply wave 2FA off.
     Task DisableTotpAsync(Guid userId, string code, CancellationToken cancellationToken = default);
+
+    /// (Re)generates the user's TOTP recovery codes. Returns the raw codes —
+    /// callers display them once and discard. Existing codes are invalidated
+    /// in the same transaction so a fresh set fully supersedes the old one.
+    /// TOTP must be enabled.
+    Task<IReadOnlyList<string>> RegenerateRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// Number of recovery codes the user has left (unused). Surfaced on the
+    /// account page so users notice when they're running low.
+    Task<int> CountRemainingRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default);
 
     /// Re-issues a verification email if an unverified account exists at <paramref name="email"/>.

@@ -12,6 +12,7 @@ public enum CommentDeletionStrategy
 public sealed record AccountExportComment(Guid Id, Guid PostId, string Body, DateTime CreatedAt);
 public sealed record AccountExportPost(Guid Id, string Title, string Slug, DateTime CreatedAt, DateTime UpdatedAt, bool Published);
 public sealed record AccountExportRefreshToken(Guid Id, DateTime CreatedAt, DateTime ExpiresAt, DateTime? RevokedAt);
+public sealed record AccountExportAuditEvent(Guid Id, string Kind, string? Detail, DateTime At);
 
 /// Everything the service knows about the account, in a shape suitable for
 /// JSON download. No password hashes, no salts, no raw refresh tokens — those
@@ -23,10 +24,12 @@ public sealed record AccountExport(
     bool EmailVerified,
     bool IsAdmin,
     bool TotpEnabled,
+    int RecoveryCodesRemaining,
     DateTime CreatedAt,
     IReadOnlyList<AccountExportPost> Posts,
     IReadOnlyList<AccountExportComment> Comments,
-    IReadOnlyList<AccountExportRefreshToken> RefreshTokens);
+    IReadOnlyList<AccountExportRefreshToken> RefreshTokens,
+    IReadOnlyList<AccountExportAuditEvent> AuditEvents);
 
 public interface IAccountService
 {

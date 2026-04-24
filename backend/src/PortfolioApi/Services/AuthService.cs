@@ -7,6 +7,8 @@ using PortfolioApi.Constants;
 using PortfolioApi.Data;
 using PortfolioApi.Models;
 
+// Audit constants live alongside the rest of the constants — pull both up front.
+
 namespace PortfolioApi.Services;
 
 public class AuthService : IAuthService
@@ -17,19 +19,26 @@ public class AuthService : IAuthService
     private const int Argon2HashSize = 32;
     private const int SaltSize = 16;
     private const int RefreshTokenBytes = 48;
+    private const int RecoveryCodeCount = 10;
+    // 5 base32 chars per group × 2 groups = 10 chars of entropy per code,
+    // ~50 bits — plenty to survive 10 codes' worth of guessing under rate
+    // limits. Display format inserts the dash for readability.
+    private const int RecoveryCodeGroupChars = 5;
 
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly IEmailService _email;
     private readonly ITotpService _totp;
+    private readonly IAuditService _audit;
     private readonly JwtOptions _jwtOpt;
 
-    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, ITotpService totp, IOptions<JwtOptions> jwtOpt)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, ITotpService totp, IAuditService audit, IOptions<JwtOptions> jwtOpt)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
         _totp = totp;
+        _audit = audit;
         _jwtOpt = jwtOpt.Value;
     }
 
@@ -120,10 +129,87 @@ public class AuthService : IAuthService
         if (user.TotpEnabledAt is null || user.TotpSecret is null)
             throw new AuthFailedException("TOTP is not enabled");
 
-        if (!_totp.Verify(user.TotpSecret, code))
-            throw new AuthFailedException("Invalid TOTP code");
+        var trimmed = (code ?? "").Trim();
 
+        // Branch on shape: 6 digits → TOTP code; anything else → try recovery.
+        // Both paths must be present; a TOTP attempt that fails should not
+        // leak through the recovery path and vice versa.
+        if (trimmed.Length == 6 && trimmed.All(char.IsDigit))
+        {
+            if (_totp.Verify(user.TotpSecret, trimmed)) return user;
+            throw new AuthFailedException("Invalid TOTP code");
+        }
+
+        // Recovery code: normalise (uppercase, drop dashes/spaces), look up
+        // the SHA-256, mark used. Single-use.
+        var normalised = NormaliseRecoveryCode(trimmed);
+        if (normalised.Length == 0) throw new AuthFailedException("Invalid code");
+
+        var hash = SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(normalised));
+        var match = await _db.RecoveryCodes
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.UsedAt == null && r.CodeHash == hash, cancellationToken);
+        if (match is null) throw new AuthFailedException("Invalid code");
+
+        match.UsedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
         return user;
+    }
+
+    public async Task<IReadOnlyList<string>> RegenerateRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        if (user.TotpEnabledAt is null)
+            throw new InvalidOperationException("TOTP is not enabled");
+
+        // Wipe the old set (used or not — generating a new sheet should fully
+        // supersede the previous one) and insert a fresh batch in one round-trip.
+        await _db.RecoveryCodes
+            .Where(r => r.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var raw = new List<string>(RecoveryCodeCount);
+        for (int i = 0; i < RecoveryCodeCount; i++) raw.Add(GenerateRecoveryCode());
+
+        var rows = raw.Select(code => new RecoveryCode
+        {
+            UserId = userId,
+            CodeHash = SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(NormaliseRecoveryCode(code)))
+        });
+        _db.RecoveryCodes.AddRange(rows);
+        _audit.Record(userId, AuditKind.RecoveryCodesRegenerated);
+        await _db.SaveChangesAsync(cancellationToken);
+        return raw;
+    }
+
+    public Task<int> CountRemainingRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        _db.RecoveryCodes.CountAsync(r => r.UserId == userId && r.UsedAt == null, cancellationToken);
+
+    // 10 base32 chars, displayed as XXXXX-XXXXX. Lowercase 'l' / digit '1' /
+    // 'o' / '0' aren't in the base32 alphabet to begin with so there's no
+    // confusable-character cleanup to do.
+    private static string GenerateRecoveryCode()
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; // RFC 4648 base32
+        var total = RecoveryCodeGroupChars * 2;
+        var bytes = RandomNumberGenerator.GetBytes(total);
+        var chars = new char[total + 1];
+        for (int i = 0; i < total; i++) chars[i < RecoveryCodeGroupChars ? i : i + 1] = alphabet[bytes[i] % alphabet.Length];
+        chars[RecoveryCodeGroupChars] = '-';
+        return new string(chars);
+    }
+
+    // Strip dashes / whitespace and uppercase so the user can type the code
+    // however they like. Drop anything outside the base32 alphabet so the
+    // hash lookup is over a normalised value.
+    private static string NormaliseRecoveryCode(string raw)
+    {
+        var sb = new System.Text.StringBuilder(raw.Length);
+        foreach (var ch in raw.ToUpperInvariant())
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= '2' && ch <= '7'))
+                sb.Append(ch);
+        return sb.ToString();
     }
 
     public async Task<TotpEnrolment> StartTotpEnrolmentAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -160,6 +246,7 @@ public class AuthService : IAuthService
             throw new AuthFailedException("Invalid TOTP code");
 
         user.TotpEnabledAt = DateTime.UtcNow;
+        _audit.Record(userId, AuditKind.TotpEnabled);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -172,12 +259,19 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("TOTP is not enabled.");
 
         // Require a current code: an attacker with a hijacked access token
-        // shouldn't be able to neuter the second factor in one click.
+        // shouldn't be able to neuter the second factor in one click. Recovery
+        // codes don't count here — disabling needs the live second factor.
         if (!_totp.Verify(user.TotpSecret, code))
             throw new AuthFailedException("Invalid TOTP code");
 
         user.TotpSecret = null;
         user.TotpEnabledAt = null;
+        // Old recovery codes are useless without a TOTP secret; drop them so
+        // a future re-enrolment starts from a clean sheet.
+        await _db.RecoveryCodes
+            .Where(r => r.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+        _audit.Record(userId, AuditKind.TotpDisabled);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -219,6 +313,7 @@ public class AuthService : IAuthService
             .Where(t => t.UserId == userId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
 
+        _audit.Record(userId, AuditKind.PasswordChanged);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -227,6 +322,8 @@ public class AuthService : IAuthService
         await _db.RefreshTokens
             .Where(t => t.UserId == userId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+        _audit.Record(userId, AuditKind.SessionsRevoked);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RequestEmailChangeAsync(Guid userId, string newEmail, CancellationToken cancellationToken = default)
@@ -269,6 +366,7 @@ public class AuthService : IAuthService
         if (await _db.Users.AnyAsync(u => u.Email == newEmail && u.Id != userId, cancellationToken))
             return false;
 
+        var oldEmail = user.Email;
         user.Email = newEmail;
         // Token possession proves the user controls the new address; flip the
         // verified-at to now so the new address is treated as confirmed.
@@ -281,8 +379,17 @@ public class AuthService : IAuthService
             .Where(t => t.UserId == userId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
 
+        // Detail records the destination domain only — never the full address —
+        // so a leaked DB doesn't leak the user's mailbox.
+        _audit.Record(userId, AuditKind.EmailChanged, $"to *@{DomainOf(newEmail)} (from *@{DomainOf(oldEmail)})");
         await _db.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private static string DomainOf(string email)
+    {
+        var at = email.LastIndexOf('@');
+        return at >= 0 && at < email.Length - 1 ? email[(at + 1)..] : "unknown";
     }
 
     public async Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default)
@@ -377,6 +484,22 @@ public class AuthService : IAuthService
             .Where(t => t.UserId == userId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
 
+        // The email-reset flow is the only canonical way back into an account
+        // when both the authenticator AND the recovery codes are lost. Clear
+        // TOTP so a lost device doesn't become a permanent lockout. The user
+        // re-enrols from /account on next login.
+        var clearedTotp = false;
+        if (user.TotpEnabledAt is not null || user.TotpSecret is not null)
+        {
+            user.TotpSecret = null;
+            user.TotpEnabledAt = null;
+            await _db.RecoveryCodes
+                .Where(r => r.UserId == userId)
+                .ExecuteDeleteAsync(cancellationToken);
+            clearedTotp = true;
+        }
+
+        _audit.Record(userId, AuditKind.PasswordReset, clearedTotp ? "TOTP also cleared" : null);
         await _db.SaveChangesAsync(cancellationToken);
     }
 

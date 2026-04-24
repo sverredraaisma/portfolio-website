@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITotpService, TotpService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<RpcRouter>();
         services.AddScoped<AuthMethods>();

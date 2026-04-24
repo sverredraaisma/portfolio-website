@@ -39,6 +39,20 @@ public class AccountService : IAccountService
             .Select(t => new AccountExportRefreshToken(t.Id, t.CreatedAt, t.ExpiresAt, t.RevokedAt))
             .ToListAsync(cancellationToken);
 
+        var recoveryCodesRemaining = await _db.RecoveryCodes
+            .CountAsync(r => r.UserId == userId && r.UsedAt == null, cancellationToken);
+
+        // Cap at 100 — the panel shows recent activity, not the full history.
+        // The full row count is still in the JSON download because the export
+        // is meant to be exhaustive.
+        var auditEvents = await _db.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.At)
+            .Take(100)
+            .Select(a => new AccountExportAuditEvent(a.Id, a.Kind, a.Detail, a.At))
+            .ToListAsync(cancellationToken);
+
         return new AccountExport(
             user.Id,
             user.Username,
@@ -46,10 +60,12 @@ public class AccountService : IAccountService
             user.EmailVerifiedAt is not null,
             user.IsAdmin,
             user.TotpEnabledAt is not null,
+            recoveryCodesRemaining,
             user.CreatedAt,
             posts,
             comments,
-            refreshTokens);
+            refreshTokens,
+            auditEvents);
     }
 
     public async Task DeleteAsync(Guid userId, CommentDeletionStrategy commentStrategy, CancellationToken cancellationToken = default)

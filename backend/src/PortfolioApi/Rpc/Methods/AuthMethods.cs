@@ -94,6 +94,10 @@ public sealed record LoginResponse(AuthSuccess? Tokens, string? Challenge)
 
 public sealed record TotpEnrolmentDto(string OtpAuthUri, string SecretBase32);
 
+public sealed record RecoveryCodesDto(IReadOnlyList<string> Codes);
+
+public sealed record TotpConfirmResult(IReadOnlyList<string> RecoveryCodes);
+
 public class AuthMethods
 {
     private readonly IAuthService _auth;
@@ -167,11 +171,21 @@ public class AuthMethods
         return new TotpEnrolmentDto(enrol.OtpAuthUri, enrol.Base32Secret);
     }
 
-    public async Task<OkResult> TotpConfirm(TotpCodeParams p, RpcContext ctx)
+    public async Task<TotpConfirmResult> TotpConfirm(TotpCodeParams p, RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
         await _auth.ConfirmTotpEnrolmentAsync(userId, p.Code, ctx.CancellationToken);
-        return new OkResult();
+        // Issue an initial sheet of recovery codes immediately on enrolment;
+        // the client must show them once and tell the user to save them.
+        var codes = await _auth.RegenerateRecoveryCodesAsync(userId, ctx.CancellationToken);
+        return new TotpConfirmResult(codes);
+    }
+
+    public async Task<RecoveryCodesDto> TotpRegenerateRecoveryCodes(RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var codes = await _auth.RegenerateRecoveryCodesAsync(userId, ctx.CancellationToken);
+        return new RecoveryCodesDto(codes);
     }
 
     public async Task<OkResult> TotpDisable(TotpCodeParams p, RpcContext ctx)
