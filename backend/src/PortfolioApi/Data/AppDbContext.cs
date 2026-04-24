@@ -44,7 +44,9 @@ public class AppDbContext : DbContext
             e.HasOne(c => c.Author)
                 .WithMany(u => u.Comments)
                 .HasForeignKey(c => c.AuthorId)
-                .OnDelete(DeleteBehavior.Restrict);
+                // NULL on author delete = anonymised. Required for AVG: a user
+                // can leave their comments behind without identifying them.
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<RefreshToken>(e =>

@@ -53,12 +53,14 @@ public static class ServiceCollectionExtensions
         // signs/verifies share the same parameters.
         services.AddSingleton<ISigningService, FalconSigningService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAccountService, AccountService>();
 
         services.AddScoped<RpcRouter>();
         services.AddScoped<AuthMethods>();
         services.AddScoped<PostMethods>();
         services.AddScoped<CommentMethods>();
         services.AddScoped<SigningMethods>();
+        services.AddScoped<AccountMethods>();
 
         return services;
     }

@@ -9,6 +9,8 @@ public class Comment
     public Guid PostId { get; set; }
     public Post? Post { get; set; }
 
-    public Guid AuthorId { get; set; }
+    // Nullable so a user can leave their comments behind (anonymised) when
+    // they delete their account. NULL is rendered as "anonymous" client-side.
+    public Guid? AuthorId { get; set; }
     public User? Author { get; set; }
 }

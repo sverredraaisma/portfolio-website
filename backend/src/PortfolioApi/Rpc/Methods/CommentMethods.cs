@@ -46,7 +46,14 @@ public class CommentMethods
             .OrderBy(c => c.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
-            .Select(c => new CommentDto(c.Id, c.Body, c.CreatedAt, c.Author!.Username, c.Author!.IsAdmin))
+            // Author is null when the user deleted their account and chose
+            // "anonymise" — render as "anonymous" with no admin marker.
+            .Select(c => new CommentDto(
+                c.Id,
+                c.Body,
+                c.CreatedAt,
+                c.Author == null ? "anonymous" : c.Author.Username,
+                c.Author != null && c.Author.IsAdmin))
             .ToListAsync(ctx.CancellationToken);
 
         var hasMore = rows.Count > pageSize;

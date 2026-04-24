@@ -42,7 +42,7 @@ public class RpcRouter
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.Ordinal);
     private readonly ILogger<RpcRouter> _log;
 
-    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, ILogger<RpcRouter> log)
+    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, ILogger<RpcRouter> log)
     {
         _log = log;
 
@@ -74,6 +74,10 @@ public class RpcRouter
         Register("signing.publicKey", RpcHandlers.Typed<PublicKeyDto>(signing.PublicKey));
         Register("signing.sign", RpcHandlers.Typed<SignStatementParams, SignedStatement>(signing.Sign));
         Register("signing.verify", RpcHandlers.Typed<VerifyStatementParams, VerifyResultDto>(signing.Verify));
+
+        // Account (AVG / GDPR — data export and right-to-erasure)
+        Register("account.export", RpcHandlers.Typed<AccountExport>(accounts.Export));
+        Register("account.delete", RpcHandlers.Typed<DeleteAccountParams, OkResult>(accounts.Delete));
     }
 
     private void Register(string method, RpcHandler handler) => _handlers[method] = handler;
