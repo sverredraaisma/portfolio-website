@@ -60,8 +60,9 @@ public sealed class TotpService : ITotpService
     public bool Verify(byte[] secret, string code)
     {
         if (secret is null || secret.Length == 0) return false;
-        if (string.IsNullOrWhiteSpace(code) || code.Length != Digits) return false;
-        // Strip a stray space or two — many apps display "123 456".
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        // Strip a stray space or two BEFORE the length check — many apps
+        // display "123 456" with the gap baked in.
         var trimmed = code.Replace(" ", "");
         if (trimmed.Length != Digits) return false;
         foreach (var ch in trimmed)
