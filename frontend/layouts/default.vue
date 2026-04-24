@@ -23,6 +23,7 @@ async function logout() {
         <NuxtLink to="/verify-statement" class="hover:text-cyan-400">verify</NuxtLink>
         <NuxtLink to="/privacy" class="hover:text-cyan-400">privacy</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/admin/posts" class="hover:text-cyan-400">manage</NuxtLink>
+        <NuxtLink v-if="auth.user?.isAdmin" to="/admin/comments" class="hover:text-cyan-400">moderate</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/posts/new" class="hover:text-cyan-400">new</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/sign" class="hover:text-cyan-400">sign</NuxtLink>
         <template v-if="auth.isAuthenticated">

@@ -83,6 +83,7 @@ public class RpcRouter
 
         // Comments
         Register("comments.list", RpcHandlers.Typed<ListCommentsParams, PaginatedResult<CommentDto>>(comments.List));
+        Register("comments.listAll", RpcHandlers.Typed<ListAllCommentsParams, PaginatedResult<CommentModerationDto>>(comments.ListAll));
         Register("comments.create", RpcHandlers.Typed<CreateCommentParams, CommentDto>(comments.Create));
         Register("comments.update", RpcHandlers.Typed<UpdateCommentParams, CommentDto>(comments.Update));
         Register("comments.delete", RpcHandlers.Typed<DeleteCommentParams, OkResult>(comments.Delete));

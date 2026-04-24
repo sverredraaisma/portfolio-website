@@ -14,6 +14,12 @@ public sealed record ListCommentsParams
     public int PageSize { get; init; } = 50;
 }
 
+public sealed record ListAllCommentsParams
+{
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 50;
+}
+
 public sealed record CreateCommentParams
 {
     public required Guid PostId { get; init; }
@@ -34,6 +40,17 @@ public sealed record UpdateCommentParams
 // ---- Response records ------------------------------------------------------
 
 public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, string Author, bool AuthorIsAdmin);
+
+/// Moderation view: includes the host post so the moderator can jump to it.
+public sealed record CommentModerationDto(
+    Guid Id,
+    string Body,
+    DateTime CreatedAt,
+    string Author,
+    bool AuthorIsAdmin,
+    Guid PostId,
+    string PostTitle,
+    string PostSlug);
 
 public class CommentMethods
 {
@@ -105,6 +122,37 @@ public class CommentMethods
         _db.Comments.Remove(c);
         await _db.SaveChangesAsync(ctx.CancellationToken);
         return new OkResult();
+    }
+
+    public async Task<PaginatedResult<CommentModerationDto>> ListAll(ListAllCommentsParams p, RpcContext ctx)
+    {
+        // Admin-only: the moderation queue should not enumerate user-supplied
+        // content for non-admin callers.
+        ctx.RequireAdmin();
+
+        var page = p.Page < 1 ? 1 : p.Page;
+        var pageSize = Math.Clamp(p.PageSize, 1, 200);
+
+        var rows = await _db.Comments
+            .AsNoTracking()
+            .OrderByDescending(c => c.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize + 1)
+            .Select(c => new CommentModerationDto(
+                c.Id,
+                c.Body,
+                c.CreatedAt,
+                c.Author == null ? "anonymous" : c.Author.Username,
+                c.Author != null && c.Author.IsAdmin,
+                c.PostId,
+                c.Post!.Title,
+                c.Post!.Slug))
+            .ToListAsync(ctx.CancellationToken);
+
+        var hasMore = rows.Count > pageSize;
+        if (hasMore) rows.RemoveAt(rows.Count - 1);
+
+        return new PaginatedResult<CommentModerationDto>(rows, page, pageSize, hasMore);
     }
 
     public async Task<CommentDto> Update(UpdateCommentParams p, RpcContext ctx)
