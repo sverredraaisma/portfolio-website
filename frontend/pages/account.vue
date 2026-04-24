@@ -16,6 +16,8 @@ type AccountExport = {
   username: string
   email: string
   emailVerified: boolean
+  emailVerifySentAt: string | null
+  emailVerifyHours: number
   isAdmin: boolean
   totpEnabled: boolean
   recoveryCodesRemaining: number
@@ -67,6 +69,27 @@ const revokeMessage = ref('')
 const newEmail = ref('')
 const requestingEmail = ref(false)
 const emailMessage = ref('')
+
+// Verification expiry banner state
+const verifyResendStatus = ref<'idle' | 'sending' | 'sent'>('idle')
+async function resendVerification() {
+  if (!data.value) return
+  verifyResendStatus.value = 'sending'
+  try {
+    await rpc.call<void>('auth.resendVerification', { email: data.value.email })
+  } finally {
+    verifyResendStatus.value = 'sent'
+    // Reload so the new sent-at timestamp shows up.
+    await loadExport()
+  }
+}
+
+const verifyExpiry = computed(() => {
+  if (!data.value?.emailVerifySentAt) return null
+  const sent = new Date(data.value.emailVerifySentAt)
+  const expiresAt = new Date(sent.getTime() + data.value.emailVerifyHours * 3_600_000)
+  return { sent, expiresAt, expired: expiresAt.getTime() <= Date.now() }
+})
 
 // TOTP panel state
 const totpEnrolment = ref<TotpEnrolment | null>(null)
@@ -380,6 +403,29 @@ async function deleteAccount() {
     <p v-if="error" class="text-red-400 text-sm">{{ error }}</p>
 
     <template v-if="data">
+      <div
+        v-if="!data.emailVerified"
+        class="border rounded p-3 text-sm space-y-2"
+        :class="verifyExpiry?.expired
+          ? 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950'
+          : 'border-yellow-400 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950'"
+      >
+        <div class="font-bold" :class="verifyExpiry?.expired ? 'text-red-500' : 'text-yellow-600 dark:text-yellow-400'">
+          {{ verifyExpiry?.expired ? 'Verification link expired' : 'Email not yet verified' }}
+        </div>
+        <div v-if="verifyExpiry" class="text-xs text-zinc-700 dark:text-zinc-300">
+          Last link sent {{ verifyExpiry.sent.toLocaleString() }};
+          <template v-if="verifyExpiry.expired">it expired {{ verifyExpiry.expiresAt.toLocaleString() }}.</template>
+          <template v-else>expires {{ verifyExpiry.expiresAt.toLocaleString() }}.</template>
+        </div>
+        <button
+          :disabled="verifyResendStatus === 'sending'"
+          @click="resendVerification"
+          class="text-xs bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-3 py-1 disabled:opacity-50"
+        >{{ verifyResendStatus === 'sending' ? '...' : 'send a new link' }}</button>
+        <span v-if="verifyResendStatus === 'sent'" class="text-xs text-cyan-700 dark:text-cyan-400 ml-2">Sent.</span>
+      </div>
+
       <div class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-1 text-sm">
         <div><span class="text-zinc-500">username:</span> {{ data.username }}</div>
         <div><span class="text-zinc-500">email:</span> {{ data.email }}

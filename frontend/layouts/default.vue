@@ -3,6 +3,7 @@ import { useAuthStore } from '~/stores/auth'
 const auth = useAuthStore()
 const rpc = useRpc()
 const { theme, toggle } = useTheme()
+const route = useRoute()
 
 async function logout() {
   // Try to revoke the refresh token server-side; ignore failures (the local
@@ -12,6 +13,17 @@ async function logout() {
   }
   auth.logout()
 }
+
+// Banner: only nag when the user *just* logged in but never confirmed.
+// `auth.user.emailVerified` is set on the session payload; `false` means the
+// user did slip through (only possible if email-verify is bypassed) or the
+// flag is just missing from the stored object — either way, hint at /account
+// for the resend flow. Hide on /account itself so it doesn't render twice.
+const showVerifyBanner = computed(() =>
+  auth.isAuthenticated &&
+  auth.user?.emailVerified === false &&
+  route.path !== '/account'
+)
 </script>
 
 <template>
@@ -41,6 +53,13 @@ async function logout() {
         >{{ theme === 'dark' ? '☀' : '☾' }}</button>
       </nav>
     </header>
+    <div
+      v-if="showVerifyBanner"
+      class="bg-yellow-100 dark:bg-yellow-950 border-b border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300 text-sm px-6 py-2 text-center"
+    >
+      Your email is not yet verified —
+      <NuxtLink to="/account" class="underline hover:text-yellow-900 dark:hover:text-yellow-200">resend the link</NuxtLink>.
+    </div>
     <main>
       <slot />
     </main>

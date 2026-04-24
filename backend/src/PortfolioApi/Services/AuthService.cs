@@ -80,6 +80,8 @@ public class AuthService : IAuthService
         }
 
         var token = _jwt.CreateEmailVerifyToken(user.Id, user.Email);
+        user.EmailVerifySentAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
         await _email.SendVerificationAsync(user.Email, token);
 
         return user;
@@ -467,6 +469,8 @@ public class AuthService : IAuthService
         if (user is null || user.EmailVerifiedAt is not null) return;
 
         var token = _jwt.CreateEmailVerifyToken(user.Id, user.Email);
+        user.EmailVerifySentAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
         await _email.SendVerificationAsync(user.Email, token);
     }
 

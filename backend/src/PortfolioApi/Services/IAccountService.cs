@@ -22,6 +22,13 @@ public sealed record AccountExport(
     string Username,
     string Email,
     bool EmailVerified,
+    /// When the most recent verification email was sent. Null if never sent
+    /// (not normally possible — registration always sends one). Used by the
+    /// UI to surface "link expires at X".
+    DateTime? EmailVerifySentAt,
+    /// Lifetime of a verification link, in hours, so the UI can compute the
+    /// expiry without baking the same constant on both sides.
+    int EmailVerifyHours,
     bool IsAdmin,
     bool TotpEnabled,
     int RecoveryCodesRemaining,

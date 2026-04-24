@@ -11,6 +11,10 @@ public class User
     public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
     public DateTime? EmailVerifiedAt { get; set; }
+    /// Timestamp of the most recently sent verification link. Used purely
+    /// for surfacing "link expires at..." on the account UI; the JWT itself
+    /// carries the authoritative expiry.
+    public DateTime? EmailVerifySentAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// Admin users are the only ones who can create/edit/delete posts.

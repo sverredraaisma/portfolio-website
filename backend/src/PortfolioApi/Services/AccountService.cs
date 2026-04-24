@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PortfolioApi.Configuration;
 using PortfolioApi.Data;
 
 namespace PortfolioApi.Services;
@@ -6,8 +8,13 @@ namespace PortfolioApi.Services;
 public class AccountService : IAccountService
 {
     private readonly AppDbContext _db;
+    private readonly JwtOptions _jwt;
 
-    public AccountService(AppDbContext db) => _db = db;
+    public AccountService(AppDbContext db, IOptions<JwtOptions> jwt)
+    {
+        _db = db;
+        _jwt = jwt.Value;
+    }
 
     public async Task<AccountExport> ExportAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -58,6 +65,8 @@ public class AccountService : IAccountService
             user.Username,
             user.Email,
             user.EmailVerifiedAt is not null,
+            user.EmailVerifySentAt,
+            _jwt.EmailVerifyHours,
             user.IsAdmin,
             user.TotpEnabledAt is not null,
             recoveryCodesRemaining,
