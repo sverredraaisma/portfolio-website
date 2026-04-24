@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Spinner from '~/components/Spinner.vue'
 import { formatTime } from '~/composables/useDate'
 
 definePageMeta({ middleware: 'admin' })
@@ -65,8 +66,12 @@ onMounted(() => load(1))
       <NuxtLink to="/admin/posts" class="text-xs text-zinc-500 hover:text-cyan-400">manage posts →</NuxtLink>
     </div>
 
-    <p v-if="loading" class="text-zinc-500">loading...</p>
-    <p v-else-if="!rows.length" class="text-zinc-500">No comments yet.</p>
+    <div v-if="loading" class="text-zinc-500 text-sm flex items-center gap-2">
+      <Spinner size="sm" /> loading the queue...
+    </div>
+    <div v-else-if="!rows.length" class="text-center py-12 text-zinc-500">
+      <p class="text-base">Inbox zero — nothing to moderate right now.</p>
+    </div>
 
     <ul v-else class="divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-300 dark:border-zinc-800 rounded">
       <li v-for="r in rows" :key="r.id" class="px-4 py-3 flex gap-3 items-start">

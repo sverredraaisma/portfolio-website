@@ -41,6 +41,18 @@ async function scrollToBottom() {
 
 onMounted(async () => {
   await load()
+  // If we landed via a #c-<id> hash (e.g. from the moderation queue), scroll
+  // and pulse-highlight the matched row instead of bottoming out the list.
+  if (typeof window !== 'undefined' && window.location.hash.startsWith('#c-')) {
+    await nextTick()
+    const el = document.getElementById(window.location.hash.slice(1))
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('comment-pulse')
+      setTimeout(() => el.classList.remove('comment-pulse'), 2000)
+      return
+    }
+  }
   await scrollToBottom()
 })
 
@@ -135,7 +147,7 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
 <template>
   <div class="bg-black border border-cyan-900 rounded p-4 text-sm leading-6 text-cyan-300">
     <div ref="scroller" class="space-y-1 max-h-80 overflow-y-auto">
-      <div v-for="c in comments" :key="c.id" class="group flex items-start">
+      <div v-for="c in comments" :key="c.id" :id="`c-${c.id}`" class="group flex items-start">
         <div class="flex-1">
           <span class="text-cyan-600">[{{ formatTime(c.createdAt) }}]</span>
           <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-cyan-600'">
@@ -149,7 +161,7 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
                 v-model="editDraft"
                 :disabled="savingEdit"
                 @keyup.escape="cancelEdit"
-                class="flex-1 bg-transparent outline-none border-b border-cyan-800 text-cyan-300"
+                class="flex-1 bg-transparent border-b border-cyan-800 text-cyan-300"
                 autofocus
               />
               <button :disabled="savingEdit" class="text-xs text-cyan-400 hover:text-cyan-300">save</button>
@@ -186,7 +198,7 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
         v-model="draft"
         :disabled="sending"
         :placeholder="auth.isAuthenticated ? 'type a comment, press enter' : 'log in to comment'"
-        class="flex-1 bg-transparent outline-none border-none placeholder-cyan-800"
+        class="flex-1 bg-transparent border-none placeholder-cyan-800"
       />
       <span class="blink ml-1">█</span>
     </form>
@@ -194,3 +206,16 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
     <p v-if="error" class="text-red-400 text-xs mt-2">{{ error }}</p>
   </div>
 </template>
+
+<style scoped>
+/* Two-second cyan flash so a moderator landing via #c-<id> can spot the row.
+   Defined locally so it doesn't leak elsewhere. */
+:deep(.comment-pulse) {
+  animation: pulse 1.8s ease-out;
+  border-radius: 4px;
+}
+@keyframes pulse {
+  0%   { background-color: rgba(34, 211, 238, 0.4); }
+  100% { background-color: transparent; }
+}
+</style>

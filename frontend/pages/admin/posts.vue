@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Spinner from '~/components/Spinner.vue'
 import { formatTime } from '~/composables/useDate'
 
 definePageMeta({ middleware: 'admin' })
@@ -75,49 +76,62 @@ onMounted(() => load(1))
       </NuxtLink>
     </div>
 
-    <p v-if="loading" class="text-zinc-500">loading...</p>
-    <p v-else-if="!posts.length" class="text-zinc-500">No posts yet.</p>
+    <div v-if="loading" class="text-zinc-500 text-sm flex items-center gap-2">
+      <Spinner size="sm" /> loading posts...
+    </div>
+
+    <div v-else-if="!posts.length" class="text-center py-12 text-zinc-500">
+      <p class="text-base mb-3">No posts yet.</p>
+      <NuxtLink to="/posts/new" class="text-sm bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-3 py-2">
+        write your first post
+      </NuxtLink>
+    </div>
 
     <ul v-else class="divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-300 dark:border-zinc-800 rounded">
       <li
         v-for="p in posts"
         :key="p.id"
-        class="flex items-center gap-3 px-4 py-3"
+        class="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3"
       >
         <div class="flex-1 min-w-0">
           <NuxtLink :to="`/posts/${p.slug}`" class="block truncate hover:text-cyan-400">
             {{ p.title }}
           </NuxtLink>
-          <div class="text-xs text-zinc-500 truncate">
-            <span :class="p.published ? 'text-cyan-500' : 'text-yellow-500'">
+          <div class="text-xs text-zinc-500 truncate flex flex-wrap gap-x-2 mt-0.5">
+            <span
+              class="inline-flex items-center gap-1"
+              :class="p.published ? 'text-cyan-500' : 'text-yellow-500'"
+            >
+              <span class="inline-block w-1.5 h-1.5 rounded-full" :class="p.published ? 'bg-cyan-500' : 'bg-yellow-500'" />
               {{ p.published ? 'published' : 'draft' }}
             </span>
-            · {{ formatTime(p.createdAt) }} · /{{ p.slug }}
+            <span>·</span>
+            <span>{{ formatTime(p.createdAt) }}</span>
+            <span>·</span>
+            <span class="font-mono">/{{ p.slug }}</span>
           </div>
         </div>
 
-        <button
-          :disabled="busyId === p.id"
-          @click="togglePublish(p)"
-          class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-zinc-500 disabled:opacity-50"
-        >
-          {{ p.published ? 'unpublish' : 'publish' }}
-        </button>
+        <div class="flex gap-2 sm:gap-1 flex-wrap">
+          <button
+            :disabled="busyId === p.id"
+            @click="togglePublish(p)"
+            class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-500 disabled:opacity-50"
+          >
+            {{ p.published ? 'unpublish' : 'publish' }}
+          </button>
 
-        <NuxtLink
-          :to="`/posts/${p.slug}/edit`"
-          class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-zinc-500"
-        >
-          edit
-        </NuxtLink>
+          <NuxtLink
+            :to="`/posts/${p.slug}/edit`"
+            class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-500"
+          >edit</NuxtLink>
 
-        <button
-          :disabled="busyId === p.id"
-          @click="remove(p)"
-          class="text-xs px-2 py-1 rounded border border-red-300 dark:border-red-900 text-red-400 hover:border-red-700 disabled:opacity-50"
-        >
-          ✕
-        </button>
+          <button
+            :disabled="busyId === p.id"
+            @click="remove(p)"
+            class="text-xs px-2 py-1 rounded border border-red-300 dark:border-red-900 text-red-400 hover:border-red-500 disabled:opacity-50"
+          >✕</button>
+        </div>
       </li>
     </ul>
 
@@ -125,9 +139,10 @@ onMounted(() => load(1))
       <button
         :disabled="loadingMore"
         @click="load(page + 1)"
-        class="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-sm disabled:opacity-50"
+        class="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-sm disabled:opacity-50 inline-flex items-center gap-2"
       >
-        {{ loadingMore ? '...' : 'load more' }}
+        <Spinner v-if="loadingMore" size="sm" />
+        <span>{{ loadingMore ? 'loading' : 'load more' }}</span>
       </button>
     </div>
 

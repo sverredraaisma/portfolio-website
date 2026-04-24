@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global focus ring. The codebase had `outline-none` on most inputs and
+   buttons for the terminal aesthetic; that broke keyboard accessibility.
+   Restore a cyan ring on :focus-visible only — pointer focus stays clean. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid rgb(34 211 238); /* cyan-400 */
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  /* Inputs typically already render a border; offset 0 looks tighter. */
+  input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline-offset: 0;
+  }
+}
+
+@layer components {
+  /* Tiny CSS-only spinner used by the <Spinner> component (kept here so it
+     works even if the component is rendered before Tailwind's JIT picks up
+     the utility classes). */
+  .ui-spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: ui-spin 0.65s linear infinite;
+  }
+  @keyframes ui-spin { to { transform: rotate(360deg); } }
+}
+
 /* Retro CRT vibes for the landing page. Cyan-tinted in dark mode, paper-like in light. */
 @layer utilities {
   .crt {

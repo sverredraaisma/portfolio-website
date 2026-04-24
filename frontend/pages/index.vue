@@ -46,7 +46,7 @@ function run() {
         <input
           v-model="cmd"
           @keyup.enter="run"
-          class="flex-1 bg-transparent outline-none border-none text-cyan-300 placeholder-cyan-700"
+          class="flex-1 bg-transparent border-none text-cyan-300 placeholder-cyan-700"
           placeholder="type 'help'"
           autofocus
         />

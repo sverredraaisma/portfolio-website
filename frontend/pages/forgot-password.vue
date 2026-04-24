@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Spinner from '~/components/Spinner.vue'
 const email = ref('')
 const loading = ref(false)
 const done = ref(false)
@@ -37,9 +38,10 @@ async function submit() {
       />
       <button
         :disabled="loading"
-        class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50"
+        class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
-        {{ loading ? '...' : 'send reset link' }}
+        <Spinner v-if="loading" size="sm" />
+        <span>{{ loading ? 'sending' : 'send reset link' }}</span>
       </button>
       <p class="text-xs text-zinc-500">
         We won't tell you whether the address has an account — same response either way.

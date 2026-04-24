@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Spinner from '~/components/Spinner.vue'
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
 
 const route = useRoute()
@@ -72,9 +73,10 @@ async function submit() {
       />
       <button
         :disabled="loading"
-        class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50"
+        class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
-        {{ loading ? '...' : 'set new password' }}
+        <Spinner v-if="loading" size="sm" />
+        <span>{{ loading ? 'updating' : 'set new password' }}</span>
       </button>
       <p class="text-xs text-zinc-500">
         Resetting your password will sign you out of any active sessions on other devices.

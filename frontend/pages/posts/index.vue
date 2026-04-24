@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Spinner from '~/components/Spinner.vue'
 import { formatTime } from '~/composables/useDate'
 
 type PostSummary = {
@@ -116,9 +117,11 @@ watch(() => route.query.tag, (v) => {
       </span>
     </div>
 
-    <p v-if="loading" class="text-zinc-500 text-sm">loading...</p>
+    <div v-if="loading" class="text-zinc-500 text-sm flex items-center gap-2">
+      <Spinner size="sm" /> fetching...
+    </div>
 
-    <ul v-else class="space-y-3">
+    <ul v-else-if="posts.length" class="space-y-3">
       <li v-for="p in posts" :key="p.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-4 hover:border-cyan-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
           <div class="text-lg">{{ p.title }}</div>
@@ -133,8 +136,24 @@ watch(() => route.query.tag, (v) => {
           >#{{ t }}</NuxtLink>
         </div>
       </li>
-      <li v-if="!posts.length" class="text-zinc-500">No posts match.</li>
     </ul>
+
+    <!-- Friendly empty states. The wording differs depending on whether the
+         user is exploring an empty archive or got zero results back from a
+         filter — the next steps are not the same. -->
+    <div v-else class="text-center py-12 text-zinc-500 text-sm">
+      <template v-if="q || tag">
+        <p class="text-base mb-2">No posts match your filter.</p>
+        <button
+          @click="(q = '', tag = '', router.replace({ query: {} }), refresh())"
+          class="text-cyan-500 hover:text-cyan-400 underline"
+        >clear filter</button>
+      </template>
+      <template v-else>
+        <p class="text-base mb-1">Nothing here yet.</p>
+        <p class="text-xs">The first post will land here when it does.</p>
+      </template>
+    </div>
 
     <div v-if="hasMore" class="mt-6 flex justify-center">
       <button
