@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import Toaster from '~/components/Toaster.vue'
+import ShortcutsHelp from '~/components/ShortcutsHelp.vue'
 import { useAuthStore } from '~/stores/auth'
+import { bindShortcuts } from '~/composables/useShortcuts'
 const auth = useAuthStore()
 const rpc = useRpc()
 const { theme, toggle } = useTheme()
 const route = useRoute()
+const router = useRouter()
+
+const shortcutsOpen = ref(false)
+
+onMounted(() => {
+  const off = bindShortcuts({ router, toggleHelp: () => shortcutsOpen.value = !shortcutsOpen.value })
+  onBeforeUnmount(off)
+})
 
 const navOpen = ref(false)
 function closeNav() { navOpen.value = false }
@@ -114,5 +124,6 @@ const showVerifyBanner = computed(() =>
     </main>
 
     <Toaster />
+    <ShortcutsHelp v-model="shortcutsOpen" />
   </div>
 </template>
