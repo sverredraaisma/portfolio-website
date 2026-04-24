@@ -36,3 +36,7 @@ globals.useRpc = () => ({
 // useToast shim — uses the same key-cached useState shim if present.
 import { useToast as realUseToast } from '~/composables/useToast'
 globals.useToast = realUseToast
+
+// useBlocks is a pure registry lookup; safe to expose directly.
+import { useBlocks as realUseBlocks } from '~/composables/useBlocks'
+globals.useBlocks = realUseBlocks
