@@ -17,5 +17,13 @@ export default defineConfig({
     alias: {
       '~': fileURLToPath(new URL('./', import.meta.url))
     }
+  },
+  // Nuxt sets `import.meta.client` at build time. Vitest doesn't, so the
+  // pieces of code that gate browser-only work behind that flag (auth
+  // store's localStorage writes, theme plugin) become no-ops under test.
+  // Define the flag as true so the gated paths actually execute.
+  define: {
+    'import.meta.client': 'true',
+    'import.meta.server': 'false'
   }
 })
