@@ -3,6 +3,7 @@ import type { Block, PostDocument } from '~/types/blocks'
 import BlockRenderer from '~/components/BlockRenderer.vue'
 import TerminalComments from '~/components/TerminalComments.vue'
 import { formatTime } from '~/composables/useDate'
+import { readingTimeMinutes } from '~/composables/useReadingTime'
 import { useAuthStore } from '~/stores/auth'
 
 type PostFull = {
@@ -25,6 +26,8 @@ function description(blocks: Block[] | undefined): string {
   return header?.data.text ?? ''
 }
 
+const readMinutes = computed(() => readingTimeMinutes(post.value?.blocks?.blocks))
+
 useSeoMeta({
   title: () => post.value?.title,
   description: () => description(post.value?.blocks?.blocks),
@@ -40,7 +43,7 @@ useSeoMeta({
       <div>
         <h1 class="text-3xl text-cyan-400">{{ post.title }}</h1>
         <div class="text-xs text-zinc-500 mt-1">
-          {{ formatTime(post.createdAt) }} · {{ post.author }}
+          {{ formatTime(post.createdAt) }} · {{ post.author }} · ~{{ readMinutes }} min read
         </div>
       </div>
       <NuxtLink
