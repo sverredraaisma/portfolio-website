@@ -19,20 +19,30 @@ namespace PortfolioApi.Tests.Infrastructure;
 public sealed class AppFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _conn = new("DataSource=:memory:");
+    private readonly string _keysDir = Path.Combine(Path.GetTempPath(),
+        "portfolio-tests-keys-" + Guid.NewGuid().ToString("N"));
+    private readonly string _mediaDir = Path.Combine(Path.GetTempPath(),
+        "portfolio-tests-media-" + Guid.NewGuid().ToString("N"));
     public RecordingEmail Email { get; } = new();
 
     public AppFactory()
     {
         _conn.Open();
+        Directory.CreateDirectory(_keysDir);
+        Directory.CreateDirectory(_mediaDir);
         // Program.cs reads JwtOptions during AddPortfolioJwt, which runs
         // before WebApplicationFactory's ConfigureAppConfiguration overrides
-        // are visible. Setting the env vars here makes them readable from
-        // the very first configuration build.
+        // are visible. Setting env vars here makes them readable from the
+        // very first configuration build. The Signing/Image paths point at
+        // per-instance temp dirs so the test run never litters the source
+        // tree (a generated keypair previously slipped into git this way).
         Environment.SetEnvironmentVariable("Jwt__Issuer", "test-issuer");
         Environment.SetEnvironmentVariable("Jwt__Audience", "test-audience");
         Environment.SetEnvironmentVariable("Jwt__Key", "test-key-with-more-than-thirty-two-characters-please");
         Environment.SetEnvironmentVariable("ConnectionStrings__Postgres",
             "Host=localhost;Database=fake;Username=fake;Password=fake");
+        Environment.SetEnvironmentVariable("Signing__KeyPath", _keysDir);
+        Environment.SetEnvironmentVariable("Image__MediaPath", _mediaDir);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -94,7 +104,12 @@ public sealed class AppFactory : WebApplicationFactory<Program>
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _conn.Dispose();
+        if (disposing)
+        {
+            _conn.Dispose();
+            try { Directory.Delete(_keysDir, recursive: true); } catch { /* best effort */ }
+            try { Directory.Delete(_mediaDir, recursive: true); } catch { /* best effort */ }
+        }
         base.Dispose(disposing);
     }
 
