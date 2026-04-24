@@ -25,6 +25,12 @@ public sealed record DeleteCommentParams
     public required Guid Id { get; init; }
 }
 
+public sealed record UpdateCommentParams
+{
+    public required Guid Id { get; init; }
+    public required string Body { get; init; }
+}
+
 // ---- Response records ------------------------------------------------------
 
 public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, string Author, bool AuthorIsAdmin);
@@ -99,5 +105,34 @@ public class CommentMethods
         _db.Comments.Remove(c);
         await _db.SaveChangesAsync(ctx.CancellationToken);
         return new OkResult();
+    }
+
+    public async Task<CommentDto> Update(UpdateCommentParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+
+        var body = p.Body.Trim();
+        if (body.Length == 0) throw new InvalidOperationException("body required");
+        if (body.Length > 2000) throw new InvalidOperationException("body too long");
+
+        var c = await _db.Comments
+            .Include(x => x.Author)
+            .FirstOrDefaultAsync(x => x.Id == p.Id, ctx.CancellationToken)
+            ?? throw new InvalidOperationException("Comment not found");
+
+        // Edit is author-only on purpose: an admin shouldn't put words in
+        // someone else's mouth. Admins can still moderate by deleting.
+        if (c.AuthorId != userId)
+            throw new AuthFailedException("Not your comment");
+
+        c.Body = body;
+        await _db.SaveChangesAsync(ctx.CancellationToken);
+
+        return new CommentDto(
+            c.Id,
+            c.Body,
+            c.CreatedAt,
+            c.Author == null ? "anonymous" : c.Author.Username,
+            c.Author != null && c.Author.IsAdmin);
     }
 }

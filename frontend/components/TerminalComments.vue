@@ -56,6 +56,45 @@ function canDelete(c: Comment) {
   return c.author === auth.user?.username
 }
 
+// Edit is author-only on the backend. The check here is just so the button
+// doesn't show up for admins on other people's rows.
+function canEdit(c: Comment) {
+  return auth.isAuthenticated && c.author === auth.user?.username
+}
+
+const editingId = ref<string | null>(null)
+const editDraft = ref('')
+const editError = ref('')
+const savingEdit = ref(false)
+
+function startEdit(c: Comment) {
+  editingId.value = c.id
+  editDraft.value = c.body
+  editError.value = ''
+}
+function cancelEdit() {
+  editingId.value = null
+  editDraft.value = ''
+  editError.value = ''
+}
+
+async function saveEdit(c: Comment) {
+  const body = editDraft.value.trim()
+  if (!body) { editError.value = 'cannot be empty'; return }
+  savingEdit.value = true
+  editError.value = ''
+  try {
+    const updated = await rpc.call<Comment>('comments.update', { id: c.id, body })
+    const idx = comments.value.findIndex(x => x.id === c.id)
+    if (idx >= 0) comments.value[idx] = updated
+    cancelEdit()
+  } catch (e) {
+    editError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    savingEdit.value = false
+  }
+}
+
 async function remove(c: Comment) {
   try {
     await rpc.call<void>('comments.delete', { id: c.id })
@@ -103,14 +142,38 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
             {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
           </span>
           <span class="text-zinc-500"> &gt; </span>
-          <span class="whitespace-pre-wrap">{{ c.body }}</span>
+
+          <template v-if="editingId === c.id">
+            <form @submit.prevent="saveEdit(c)" class="inline-flex items-center gap-2 w-full">
+              <input
+                v-model="editDraft"
+                :disabled="savingEdit"
+                @keyup.escape="cancelEdit"
+                class="flex-1 bg-transparent outline-none border-b border-cyan-800 text-cyan-300"
+                autofocus
+              />
+              <button :disabled="savingEdit" class="text-xs text-cyan-400 hover:text-cyan-300">save</button>
+              <button type="button" @click="cancelEdit" class="text-xs text-zinc-500 hover:text-zinc-300">cancel</button>
+            </form>
+            <span v-if="editError" class="block text-xs text-red-400">{{ editError }}</span>
+          </template>
+          <span v-else class="whitespace-pre-wrap">{{ c.body }}</span>
         </div>
-        <button
-          v-if="canDelete(c)"
-          @click="remove(c)"
-          class="ml-2 text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 text-xs"
-          :title="auth.user?.isAdmin && c.author !== auth.user?.username ? 'delete (mod)' : 'delete'"
-        >✕</button>
+
+        <div v-if="editingId !== c.id" class="ml-2 flex gap-2 opacity-0 group-hover:opacity-100 text-xs">
+          <button
+            v-if="canEdit(c)"
+            @click="startEdit(c)"
+            class="text-zinc-700 hover:text-cyan-400"
+            title="edit"
+          >✎</button>
+          <button
+            v-if="canDelete(c)"
+            @click="remove(c)"
+            class="text-zinc-700 hover:text-red-400"
+            :title="auth.user?.isAdmin && c.author !== auth.user?.username ? 'delete (mod)' : 'delete'"
+          >✕</button>
+        </div>
       </div>
       <div v-if="!comments.length" class="text-zinc-600">// no comments. be the first.</div>
     </div>
