@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Toaster from '~/components/Toaster.vue'
 import { useAuthStore } from '~/stores/auth'
 const auth = useAuthStore()
 const rpc = useRpc()
@@ -111,5 +112,7 @@ const showVerifyBanner = computed(() =>
     <main>
       <slot />
     </main>
+
+    <Toaster />
   </div>
 </template>

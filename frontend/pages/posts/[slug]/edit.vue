@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PostBuilder from '~/components/PostBuilder.vue'
 import type { PostDocument } from '~/types/blocks'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({ middleware: 'admin' })
 
@@ -13,6 +14,7 @@ type PostFull = {
 const route = useRoute()
 const router = useRouter()
 const rpc = useRpc()
+const toast = useToast()
 
 const id = ref('')
 const title = ref('')
@@ -59,7 +61,12 @@ async function save(nextPublished?: boolean) {
       tags: parseTags(tagsInput.value),
       published: target
     })
+    const wasPublished = published.value
     published.value = target
+    // Phrase the toast around the transition rather than the final state so
+    // "save" on a draft and "publish" on a draft don't both say the same thing.
+    if (target !== wasPublished) toast.success(target ? 'Post published.' : 'Post unpublished.')
+    else toast.success('Saved.')
     // Navigate to the (possibly-renamed) slug.
     router.push(target ? `/posts/${slug.value}` : `/admin/posts`)
   } catch (e) {
@@ -75,6 +82,7 @@ async function remove() {
   error.value = ''
   try {
     await rpc.call<void>('posts.delete', { id: id.value })
+    toast.info('Post deleted.')
     router.push('/admin/posts')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)

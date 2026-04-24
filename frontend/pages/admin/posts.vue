@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import Spinner from '~/components/Spinner.vue'
 import { formatTime } from '~/composables/useDate'
+import { useToast } from '~/composables/useToast'
+
+const toast = useToast()
 
 definePageMeta({ middleware: 'admin' })
 
@@ -44,6 +47,7 @@ async function togglePublish(p: PostSummary) {
   try {
     await rpc.call<void>('posts.update', { id: p.id, published: !p.published })
     p.published = !p.published
+    toast.success(p.published ? 'Published.' : 'Unpublished.')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -57,6 +61,7 @@ async function remove(p: PostSummary) {
   try {
     await rpc.call<void>('posts.delete', { id: p.id })
     posts.value = posts.value.filter(x => x.id !== p.id)
+    toast.info(`Deleted "${p.title}".`)
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {

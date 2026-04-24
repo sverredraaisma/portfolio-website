@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
+import { useToast } from '~/composables/useToast'
 import {
   startPasskeyEnrolment,
   isPasskeySupported
 } from '~/composables/useWebAuthn'
+
+const toast = useToast()
 
 definePageMeta({ middleware: 'auth' })
 
@@ -135,7 +138,7 @@ async function addPasskey() {
       name: passkeyName.value || undefined
     })
     passkeyName.value = ''
-    passkeyMessage.value = `Added "${added.name}".`
+    toast.success(`Passkey "${added.name}" added.`)
     await loadPasskeys()
   } catch (e) {
     // Browser cancellations come through as DOMException 'NotAllowedError'.
@@ -153,6 +156,7 @@ async function removePasskey(p: PasskeyDto) {
   passkeyBusy.value = true
   try {
     await rpc.call<void>('auth.passkeyDelete', { id: p.id })
+    toast.info(`Passkey "${p.name}" removed.`)
     await loadPasskeys()
   } catch (e) {
     passkeyMessage.value = e instanceof Error ? e.message : String(e)
@@ -229,10 +233,12 @@ async function changePassword() {
     const currentClientHash = await hashPasswordForTransit(currentPwd.value)
     const newClientHash = await hashPasswordForTransit(newPwd.value)
     await rpc.call<void>('auth.changePassword', { currentClientHash, newClientHash })
-    pwdMessage.value = 'Password updated. Other sessions have been signed out.'
+    pwdMessage.value = ''
     currentPwd.value = ''
     newPwd.value = ''
     newPwdRepeat.value = ''
+    toast.success('Password updated. Other sessions have been signed out.')
+    await loadExport()
   } catch (e) {
     pwdMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -268,7 +274,7 @@ async function confirmTotp() {
     totpEnrolment.value = null
     totpQrDataUrl.value = ''
     totpCode.value = ''
-    totpMessage.value = 'TOTP enabled. Save the recovery codes below — they are shown only once.'
+    toast.success('Two-factor enabled. Save the recovery codes below — shown only once.')
     // Surface the freshly-issued recovery codes so the user can save them.
     freshRecoveryCodes.value = res.recoveryCodes
     await loadExport()
@@ -286,6 +292,7 @@ async function regenerateRecoveryCodes() {
   try {
     const res = await rpc.call<{ codes: string[] }>('auth.totpRegenerateRecoveryCodes')
     freshRecoveryCodes.value = res.codes
+    toast.success('New recovery codes issued. Old ones no longer work.')
     await loadExport()
   } catch (e) {
     recoveryError.value = e instanceof Error ? e.message : String(e)
@@ -330,7 +337,7 @@ async function disableTotp() {
   try {
     await rpc.call<void>('auth.totpDisable', { code: totpCode.value })
     totpCode.value = ''
-    totpMessage.value = 'TOTP disabled.'
+    toast.success('Two-factor disabled.')
     await loadExport()
   } catch (e) {
     totpMessage.value = e instanceof Error ? e.message : String(e)
@@ -348,7 +355,8 @@ async function requestEmailChange() {
   requestingEmail.value = true
   try {
     await rpc.call<void>('auth.requestEmailChange', { newEmail: newEmail.value })
-    emailMessage.value = `Confirmation link sent to ${newEmail.value}. Click it to apply the change.`
+    toast.success(`Confirmation link sent to ${newEmail.value}.`)
+    emailMessage.value = ''
     newEmail.value = ''
   } catch (e) {
     emailMessage.value = e instanceof Error ? e.message : String(e)
@@ -364,7 +372,8 @@ async function revokeAllSessions() {
     await rpc.call<void>('auth.revokeAllSessions')
     // The current session's refresh token was just revoked too; the next 401
     // will fail to refresh and the rpc client will log us out.
-    revokeMessage.value = 'All sessions revoked. You will be signed out shortly.'
+    revokeMessage.value = ''
+    toast.info('All sessions revoked. You will be signed out shortly.', 5000)
   } catch (e) {
     revokeMessage.value = e instanceof Error ? e.message : String(e)
   } finally {

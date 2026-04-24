@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import Spinner from '~/components/Spinner.vue'
 import { formatTime } from '~/composables/useDate'
+import { useToast } from '~/composables/useToast'
+
+const toast = useToast()
 
 definePageMeta({ middleware: 'admin' })
 
@@ -49,6 +52,7 @@ async function remove(r: ModRow) {
   try {
     await rpc.call<void>('comments.delete', { id: r.id })
     rows.value = rows.value.filter(x => x.id !== r.id)
+    toast.info('Comment deleted.')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {

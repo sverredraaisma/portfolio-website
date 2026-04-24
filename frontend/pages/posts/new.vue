@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import PostBuilder from '~/components/PostBuilder.vue'
 import type { PostDocument } from '~/types/blocks'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({ middleware: 'admin' })
 
 const router = useRouter()
 const rpc = useRpc()
+const toast = useToast()
 
 const title = ref('')
 const slug = ref('')
@@ -30,6 +32,7 @@ async function save(published: boolean) {
       tags: parseTags(tagsInput.value),
       published
     })
+    toast.success(published ? 'Post published.' : 'Draft saved.')
     router.push(published ? `/posts/${res.slug}` : '/admin/posts')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
