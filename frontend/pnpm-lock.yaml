@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@github/webauthn-json':
+        specifier: ^2.1.1
+        version: 2.1.1
       '@pinia/nuxt':
         specifier: ^0.5.4
         version: 0.5.5(magicast@0.5.2)(typescript@5.9.3)(vue@3.5.33(typescript@5.9.3))
@@ -450,6 +453,11 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@github/webauthn-json@2.1.1':
+    resolution: {integrity: sha512-XrftRn4z75SnaJOmZQbt7Mk+IIjqVHw+glDGOxuHwXkZBZh/MBoRS7MHjSZMDaLhT4RjN2VqiEU7EOYleuJWSQ==}
+    deprecated: 'Deprecated: Modern browsers support built-in WebAuthn JSON methods. Please use native browser methods instead. For more information, visit https://github.com/github/webauthn-json'
+    hasBin: true
 
   '@ioredis/commands@1.5.1':
     resolution: {integrity: sha512-JH8ZL/ywcJyR9MmJ5BNqZllXNZQqQbnVZOqpPQqE1vHiFgAw4NHbvE0FOduNU8IX9babitBT46571OnPTT0Zcw==}
@@ -4460,6 +4468,8 @@ snapshots:
     optional: true
 
   '@exodus/bytes@1.15.0': {}
+
+  '@github/webauthn-json@2.1.1': {}
 
   '@ioredis/commands@1.5.1': {}
 

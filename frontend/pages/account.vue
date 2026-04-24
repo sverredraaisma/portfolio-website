@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
+import {
+  startPasskeyEnrolment,
+  isPasskeySupported
+} from '~/composables/useWebAuthn'
 
 definePageMeta({ middleware: 'auth' })
+
+type PasskeyDto = { id: string; name: string; createdAt: string; lastUsedAt: string | null }
+type PasskeyOptions = { optionsJson: string; sessionId: string }
 
 type AccountExport = {
   id: string
@@ -73,6 +80,79 @@ const totpMessage = ref('')
 const freshRecoveryCodes = ref<string[] | null>(null)
 const regeneratingCodes = ref(false)
 const recoveryError = ref('')
+
+// Passkey panel state
+const passkeys = ref<PasskeyDto[]>([])
+const passkeyName = ref('')
+const passkeyBusy = ref(false)
+const passkeyMessage = ref('')
+const passkeysSupported = ref(false)
+
+async function loadPasskeys() {
+  try {
+    passkeys.value = await rpc.call<PasskeyDto[]>('auth.passkeyList')
+  } catch {
+    // best-effort; the panel renders an empty list and will recover on retry
+  }
+}
+
+async function addPasskey() {
+  passkeyMessage.value = ''
+  if (!isPasskeySupported()) {
+    passkeyMessage.value = 'Your browser does not support passkeys.'
+    return
+  }
+  passkeyBusy.value = true
+  try {
+    const opts = await rpc.call<PasskeyOptions>('auth.passkeyRegisterStart')
+    const attestationJson = await startPasskeyEnrolment(opts.optionsJson)
+    const added = await rpc.call<PasskeyDto>('auth.passkeyRegisterFinish', {
+      sessionId: opts.sessionId,
+      attestationJson,
+      name: passkeyName.value || undefined
+    })
+    passkeyName.value = ''
+    passkeyMessage.value = `Added "${added.name}".`
+    await loadPasskeys()
+  } catch (e) {
+    // Browser cancellations come through as DOMException 'NotAllowedError'.
+    const msg = e instanceof Error ? e.message : String(e)
+    passkeyMessage.value = msg.includes('NotAllowedError')
+      ? 'Cancelled.'
+      : msg
+  } finally {
+    passkeyBusy.value = false
+  }
+}
+
+async function removePasskey(p: PasskeyDto) {
+  if (!confirm(`Remove "${p.name}"? You will lose this passkey on its device.`)) return
+  passkeyBusy.value = true
+  try {
+    await rpc.call<void>('auth.passkeyDelete', { id: p.id })
+    await loadPasskeys()
+  } catch (e) {
+    passkeyMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    passkeyBusy.value = false
+  }
+}
+
+async function renamePasskey(p: PasskeyDto) {
+  const next = prompt('New name:', p.name)
+  if (!next || next.trim() === p.name) return
+  try {
+    await rpc.call<void>('auth.passkeyRename', { id: p.id, name: next.trim() })
+    await loadPasskeys()
+  } catch (e) {
+    passkeyMessage.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+onMounted(async () => {
+  passkeysSupported.value = isPasskeySupported()
+  await loadPasskeys()
+})
 
 async function loadExport() {
   loading.value = true
@@ -312,6 +392,46 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ passkeys</h2>
+        <p class="text-xs text-zinc-500">
+          Sign in with your device biometric or hardware key — no password, no codes.
+          Each device you add can sign in on its own.
+        </p>
+
+        <ul v-if="passkeys.length" class="text-sm divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded">
+          <li v-for="p in passkeys" :key="p.id" class="flex items-center gap-3 px-3 py-2">
+            <div class="flex-1 min-w-0">
+              <div class="truncate">{{ p.name }}</div>
+              <div class="text-xs text-zinc-500 truncate">
+                added {{ new Date(p.createdAt).toLocaleDateString() }}
+                <template v-if="p.lastUsedAt">· last used {{ new Date(p.lastUsedAt).toLocaleDateString() }}</template>
+              </div>
+            </div>
+            <button @click="renamePasskey(p)" class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-500">rename</button>
+            <button @click="removePasskey(p)" class="text-xs px-2 py-1 rounded border border-red-300 dark:border-red-900 text-red-400 hover:border-red-500">✕</button>
+          </li>
+        </ul>
+        <p v-else class="text-xs text-zinc-500 italic">No passkeys yet.</p>
+
+        <div class="flex gap-2 items-center">
+          <input
+            v-model="passkeyName"
+            placeholder="device label (e.g. iPhone, YubiKey)"
+            class="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm"
+          />
+          <button
+            :disabled="passkeyBusy || !passkeysSupported"
+            @click="addPasskey"
+            class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+          >{{ passkeyBusy ? '...' : 'add passkey' }}</button>
+        </div>
+        <p v-if="!passkeysSupported" class="text-xs text-yellow-500">Your browser does not support passkeys.</p>
+        <p v-if="passkeyMessage" class="text-xs"
+          :class="passkeyMessage.startsWith('Added') ? 'text-cyan-400' : 'text-red-400'"
+        >{{ passkeyMessage }}</p>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ two-factor (TOTP)</h2>

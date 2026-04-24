@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
 import { useAuthStore } from '~/stores/auth'
+import { startPasskeyAssertion, isPasskeySupported } from '~/composables/useWebAuthn'
 
 type AuthUser = { id: string; username: string; email: string; emailVerified?: boolean }
 type AuthSuccess = { accessToken: string; refreshToken: string; user: AuthUser }
@@ -82,6 +83,40 @@ function cancelTotp() {
   error.value = ''
 }
 
+const passkeyBusy = ref(false)
+const passkeysSupported = ref(false)
+
+onMounted(() => { passkeysSupported.value = isPasskeySupported() })
+
+async function loginWithPasskey() {
+  if (!isPasskeySupported()) {
+    error.value = 'Your browser does not support passkeys.'
+    return
+  }
+  error.value = ''
+  unverified.value = false
+  passkeyBusy.value = true
+  try {
+    // Discoverable-credential flow: pass the username when we have one,
+    // omit it otherwise so the browser shows all eligible credentials.
+    const opts = await rpc.call<{ optionsJson: string; sessionId: string }>(
+      'auth.passkeyLoginStart',
+      { username: username.value || undefined }
+    )
+    const assertionJson = await startPasskeyAssertion(opts.optionsJson)
+    const res = await rpc.call<LoginResponse>('auth.passkeyLoginFinish', {
+      sessionId: opts.sessionId,
+      assertionJson
+    })
+    applyResult(res)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!msg.includes('NotAllowedError')) error.value = msg
+  } finally {
+    passkeyBusy.value = false
+  }
+}
+
 async function resend() {
   if (!email.value) return
   resendStatus.value = 'sending'
@@ -101,11 +136,23 @@ async function resend() {
 
     <!-- Step 1: username + password. Hidden once the TOTP challenge arrives. -->
     <form v-if="!challenge" @submit.prevent="submit" class="space-y-3">
-      <input v-model="username" placeholder="username" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="username" />
+      <input v-model="username" placeholder="username (optional with passkey)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="username webauthn" />
       <input v-model="password" type="password" placeholder="password" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="current-password" />
-      <button :disabled="loading" class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50">
+      <button :disabled="loading || !password" class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50">
         {{ loading ? '...' : 'login' }}
       </button>
+
+      <div v-if="passkeysSupported" class="relative my-1 text-center text-xs text-zinc-500">
+        <span class="px-2 bg-zinc-50 dark:bg-zinc-950 relative z-10">or</span>
+        <span class="absolute inset-x-0 top-1/2 border-t border-zinc-300 dark:border-zinc-700 -z-0"></span>
+      </div>
+      <button
+        v-if="passkeysSupported"
+        type="button"
+        :disabled="passkeyBusy"
+        @click="loginWithPasskey"
+        class="w-full border border-cyan-600 hover:bg-cyan-600 hover:text-black text-cyan-500 rounded py-2 disabled:opacity-50"
+      >{{ passkeyBusy ? '...' : '🔑 sign in with passkey' }}</button>
     </form>
 
     <!-- Step 2: TOTP. Only shown when the server hands back a challenge. -->

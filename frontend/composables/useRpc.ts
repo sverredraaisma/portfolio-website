@@ -11,7 +11,11 @@ const NO_REFRESH_METHODS = new Set([
   'auth.register',
   // The TOTP step is the second half of login; a 401 on it means the code
   // (or the challenge) is bad — refreshing a non-existent session won't help.
-  'auth.completeTotp'
+  'auth.completeTotp',
+  // Same logic for passkey login: no session exists yet, refresh is a no-op
+  // at best and a 401 loop at worst.
+  'auth.passkeyLoginStart',
+  'auth.passkeyLoginFinish'
 ])
 
 // Module-level coalescing: if a refresh is already in flight, every concurrent
