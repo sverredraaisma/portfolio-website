@@ -17,6 +17,12 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // Production runs against Postgres; SQLite is used for service-level
+        // tests where the Postgres-specific column types and GIN indexes
+        // would cause model validation to fail. Gate the provider-specific
+        // bits behind this flag so tests can spin up the same model.
+        var isPg = Database.IsNpgsql();
+
         b.Entity<User>(e =>
         {
             e.HasIndex(u => u.Username).IsUnique();
@@ -30,11 +36,31 @@ public class AppDbContext : DbContext
             e.HasIndex(p => p.Slug).IsUnique();
             e.Property(p => p.Title).HasMaxLength(200);
             e.Property(p => p.Slug).HasMaxLength(200);
-            e.Property(p => p.Blocks).HasColumnType("jsonb");
-            // Tags map to a Postgres text[] — a GIN index lets `tag = ANY(tags)`
-            // queries stay fast when the post count grows.
-            e.Property(p => p.Tags).HasColumnType("text[]");
-            e.HasIndex(p => p.Tags).HasMethod("gin");
+            if (isPg)
+            {
+                e.Property(p => p.Blocks).HasColumnType("jsonb");
+                // Tags map to a Postgres text[] — a GIN index lets
+                // `tag = ANY(tags)` queries stay fast when the post count grows.
+                e.Property(p => p.Tags).HasColumnType("text[]");
+                e.HasIndex(p => p.Tags).HasMethod("gin");
+            }
+            else
+            {
+                // For non-Postgres providers (tests), serialise both fields
+                // through value converters so the table is still buildable.
+                // Tests against AccountService don't read these columns; they
+                // exist only because EF needs the entity in the model.
+                e.Property(p => p.Blocks).HasConversion(
+                    v => v.RootElement.GetRawText(),
+                    v => System.Text.Json.JsonDocument.Parse(v, default));
+                e.Property(p => p.Tags).HasConversion(
+                    v => string.Join(',', v),
+                    v => v.Length == 0 ? new List<string>() : v.Split(',', StringSplitOptions.None).ToList(),
+                    new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<List<string>>(
+                        (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                        v => v.Aggregate(0, (h, s) => HashCode.Combine(h, s.GetHashCode())),
+                        v => v.ToList()));
+            }
             e.HasOne(p => p.Author)
                 .WithMany(u => u.Posts)
                 .HasForeignKey(p => p.AuthorId)
