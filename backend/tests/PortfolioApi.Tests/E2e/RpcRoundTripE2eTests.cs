@@ -164,6 +164,26 @@ public class RpcRoundTripE2eTests : IClassFixture<AppFactory>, IAsyncLifetime
 
         resp.Headers.TryGetValues("Referrer-Policy", out var ref_).Should().BeTrue();
         ref_!.Should().ContainSingle().Which.Should().Be("no-referrer");
+
+        resp.Headers.TryGetValues("Cross-Origin-Opener-Policy", out var coop).Should().BeTrue();
+        coop!.Should().ContainSingle().Which.Should().Be("same-origin");
+    }
+
+    [Fact]
+    public async Task Content_Security_Policy_locks_down_frames_objects_base_and_form_targets()
+    {
+        var resp = await _client.PostAsync("/rpc", JsonContent.Create(new { method = "posts.list" }));
+
+        resp.Headers.TryGetValues("Content-Security-Policy", out var values).Should().BeTrue();
+        var csp = values!.Single();
+
+        // The *protective* directives — these are the ones that meaningfully
+        // close attack vectors regardless of the unsafe-inline tradeoff.
+        csp.Should().Contain("frame-ancestors 'none'", "no clickjacking");
+        csp.Should().Contain("object-src 'none'",     "no <object>/<embed> exploits");
+        csp.Should().Contain("base-uri 'self'",       "base-tag URL hijacking blocked");
+        csp.Should().Contain("form-action 'self'",    "form POST exfiltration blocked");
+        csp.Should().Contain("default-src 'self'");
     }
 
     [Fact]

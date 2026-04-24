@@ -83,12 +83,27 @@ using (var scope = app.Services.CreateScope())
 // Apply X-Forwarded-* before anything that reads RemoteIpAddress or Scheme.
 app.UseForwardedHeaders();
 
-// Basic security headers on every response. CSP is intentionally relaxed:
-// the SPA bundles its JS inline at runtime in places (Nuxt's hydration
-// payload), so a strict policy needs nonces or hashes to stay compatible.
-// The directives here cover the most common XSS / clickjacking vectors
-// without breaking the Nuxt runtime; a stricter policy can be layered on
-// top by the reverse proxy if needed.
+// Basic security headers on every response. nginx layers an identical CSP
+// on the public origin; setting it here too means a direct-to-backend hit
+// (dev mode without the proxy, or future operator tooling) is also covered.
+//
+// 'unsafe-inline' on script-src + style-src is reluctant — Nuxt's SSR
+// emits an inline <script> with the hydration payload and Vue scoped
+// styles get inlined as <style>. A nonce-based policy needs nuxt-security
+// or hand-rolled SSR hooks. The tighter directives still close
+// frame-ancestors / object-src / base-uri / form-action.
+const string Csp =
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "font-src 'self'; " +
+    "connect-src 'self'; " +
+    "frame-ancestors 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self'; " +
+    "object-src 'none'";
+
 app.Use(async (ctx, next) =>
 {
     var h = ctx.Response.Headers;
@@ -98,6 +113,7 @@ app.Use(async (ctx, next) =>
     h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
     h["Cross-Origin-Opener-Policy"] = "same-origin";
     h["Cross-Origin-Resource-Policy"] = "same-origin";
+    h["Content-Security-Policy"] = Csp;
     await next();
 });
 
