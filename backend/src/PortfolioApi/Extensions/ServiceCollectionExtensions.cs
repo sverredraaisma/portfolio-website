@@ -80,6 +80,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IAuditService, AuditService>();
 
+        // Background sweeper for stale refresh tokens. See class docs for
+        // the rules; runs on the host's scheduler so it stops cleanly with
+        // the app.
+        services.AddHostedService<RefreshTokenCleanupService>();
+
         services.AddScoped<RpcRouter>();
         services.AddScoped<AuthMethods>();
         services.AddScoped<PostMethods>();
