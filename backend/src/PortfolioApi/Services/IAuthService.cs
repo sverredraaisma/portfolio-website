@@ -10,6 +10,11 @@ public interface IAuthService
     Task<User?> LoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default);
     Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default);
 
+    /// Re-issues a verification email if an unverified account exists at <paramref name="email"/>.
+    /// Silently no-ops for unknown or already-verified addresses to avoid leaking
+    /// account state.
+    Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
+
     /// Issues a refresh token. Returns the raw token (returned to the client once)
     /// and the persisted record (only the SHA-256 of the token is stored).
     Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default);

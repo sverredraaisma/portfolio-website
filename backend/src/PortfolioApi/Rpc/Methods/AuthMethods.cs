@@ -40,6 +40,11 @@ public sealed record RequestPasswordResetParams
     public required string Email { get; init; }
 }
 
+public sealed record ResendVerificationParams
+{
+    public required string Email { get; init; }
+}
+
 public sealed record ResetPasswordParams
 {
     public required string Token { get; init; }
@@ -121,6 +126,13 @@ public class AuthMethods
         // Always returns ok — the service silently no-ops for unknown emails so
         // attackers can't enumerate which addresses have accounts.
         await _auth.RequestPasswordResetAsync(p.Email, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> ResendVerification(ResendVerificationParams p, RpcContext ctx)
+    {
+        // Same enumeration-resistance pattern as password reset.
+        await _auth.ResendVerificationAsync(p.Email, ctx.CancellationToken);
         return new OkResult();
     }
 

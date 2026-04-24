@@ -105,6 +105,16 @@ public class AuthService : IAuthService
         return true;
     }
 
+    public async Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+        // Silent no-op: unknown email or already verified — don't leak which case.
+        if (user is null || user.EmailVerifiedAt is not null) return;
+
+        var token = _jwt.CreateEmailVerifyToken(user.Id, user.Email);
+        await _email.SendVerificationAsync(user.Email, token);
+    }
+
     public async Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var raw = RandomNumberGenerator.GetBytes(RefreshTokenBytes);
