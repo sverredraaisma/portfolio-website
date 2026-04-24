@@ -7,8 +7,7 @@ const lines = [
   '',
   'WELCOME, GUEST.',
   '',
-  'TYPE `posts` TO BROWSE WRITINGS.',
-  'TYPE `about` TO LEARN MORE.',
+  'TYPE `help` FOR THE COMMAND LIST.',
 ]
 const shown = ref<string[]>([])
 onMounted(async () => {
@@ -19,13 +18,22 @@ onMounted(async () => {
 })
 const router = useRouter()
 const cmd = ref('')
+
+const HELP = '> commands: posts, about, verify, privacy, clear, help'
+
 function run() {
   const c = cmd.value.trim().toLowerCase()
   cmd.value = ''
-  if (c === 'posts') router.push('/posts')
-  else if (c === 'about') shown.value.push('> Hi, I build things. Frontends, backends, the occasional bad joke.')
-  else if (c === 'help') shown.value.push('> commands: posts, about, help')
-  else if (c) shown.value.push(`> command not found: ${c}`)
+  if (!c) return
+  switch (c) {
+    case 'posts':   router.push('/posts'); break
+    case 'verify':  router.push('/verify-statement'); break
+    case 'privacy': router.push('/privacy'); break
+    case 'about':   shown.value.push('> Hi, I build things. Frontends, backends, the occasional bad joke.'); break
+    case 'help':    shown.value.push(HELP); break
+    case 'clear':   shown.value = []; break
+    default:        shown.value.push(`> command not found: ${c}. type 'help'.`)
+  }
 }
 </script>
 
