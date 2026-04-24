@@ -51,6 +51,34 @@ public class EmailService : IEmailService
         return SendAsync(toEmail, "Confirm your new email", html);
     }
 
+    public Task SendSecurityAlertAsync(string toEmail, string actionLabel, string? extraNote = null)
+    {
+        var when = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        var safeAction = HtmlEscape(actionLabel);
+        var note = extraNote is null ? "" : $"<p>{HtmlEscape(extraNote)}</p>";
+        var html = $"""
+            <p>The following action just happened on your account: <strong>{safeAction}</strong>.</p>
+            <p>When: {when}</p>
+            {note}
+            <p>If this was you, no action is needed.</p>
+            <p>If it wasn't you, reset your password immediately and review the activity log on your account page.</p>
+            """;
+        // Subject is plain text (not HTML), but newlines would corrupt the
+        // SMTP header — clamp to the first line.
+        var subject = "Security alert: " + actionLabel.Replace('\n', ' ').Replace('\r', ' ');
+        return SendAsync(toEmail, subject, html);
+    }
+
+    // Small inline HTML escape — actionLabel and extraNote are server-supplied
+    // constants today, but treating them as untrusted means we can't be bitten
+    // by a future change that pipes user input in.
+    private static string HtmlEscape(string s) => s
+        .Replace("&", "&amp;")
+        .Replace("<", "&lt;")
+        .Replace(">", "&gt;")
+        .Replace("\"", "&quot;")
+        .Replace("'", "&#39;");
+
     private async Task SendAsync(string toEmail, string subject, string html)
     {
         if (string.IsNullOrWhiteSpace(_opt.From))

@@ -288,6 +288,7 @@ public class AuthService : IAuthService
         user.TotpEnabledAt = DateTime.UtcNow;
         _audit.Record(userId, AuditKind.TotpEnabled);
         await _db.SaveChangesAsync(cancellationToken);
+        FireSecurityAlert(user.Email, "Two-factor authentication enabled");
     }
 
     public async Task DisableTotpAsync(Guid userId, string code, CancellationToken cancellationToken = default)
@@ -313,6 +314,7 @@ public class AuthService : IAuthService
             .ExecuteDeleteAsync(cancellationToken);
         _audit.Record(userId, AuditKind.TotpDisabled);
         await _db.SaveChangesAsync(cancellationToken);
+        FireSecurityAlert(user.Email, "Two-factor authentication disabled");
     }
 
     public async Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default)
@@ -355,6 +357,7 @@ public class AuthService : IAuthService
 
         _audit.Record(userId, AuditKind.PasswordChanged);
         await _db.SaveChangesAsync(cancellationToken);
+        FireSecurityAlert(user.Email, "Password changed");
     }
 
     public async Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -364,6 +367,24 @@ public class AuthService : IAuthService
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
         _audit.Record(userId, AuditKind.SessionsRevoked);
         await _db.SaveChangesAsync(cancellationToken);
+
+        var address = await _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (address is not null) FireSecurityAlert(address, "All sessions revoked");
+    }
+
+    // Fire-and-forget security notification. Wrapped in a task that swallows
+    // exceptions so an SMTP failure does not unwind the calling action — the
+    // database state has already committed by the time we get here.
+    private void FireSecurityAlert(string toEmail, string actionLabel, string? extraNote = null)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await _email.SendSecurityAlertAsync(toEmail, actionLabel, extraNote); }
+            catch { /* logged by EmailService.SendAsync */ }
+        });
     }
 
     public async Task RequestEmailChangeAsync(Guid userId, string newEmail, CancellationToken cancellationToken = default)
@@ -423,6 +444,13 @@ public class AuthService : IAuthService
         // so a leaked DB doesn't leak the user's mailbox.
         _audit.Record(userId, AuditKind.EmailChanged, $"to *@{DomainOf(newEmail)} (from *@{DomainOf(oldEmail)})");
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Notify BOTH addresses: the new one knows the change happened, and
+        // the *old* one finds out so an attacker can't silently hijack the
+        // recovery channel without the legitimate owner getting a heads-up.
+        FireSecurityAlert(newEmail, "Email changed", "This is now the address on file for the account.");
+        FireSecurityAlert(oldEmail, "Email changed", $"The account email was changed to *@{DomainOf(newEmail)}. If this wasn't you, contact the controller immediately — your old address can no longer reset the account.");
+
         return true;
     }
 
@@ -541,6 +569,12 @@ public class AuthService : IAuthService
 
         _audit.Record(userId, AuditKind.PasswordReset, clearedTotp ? "TOTP also cleared" : null);
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Heads-up to the address that received the reset link — confirms the
+        // reset went through and gives the user a chance to react if their
+        // mailbox is compromised.
+        FireSecurityAlert(user.Email, "Password reset",
+            clearedTotp ? "Two-factor authentication was also cleared as part of the reset." : null);
     }
 
     public async Task<bool> SeedAdminIfEmptyAsync(string username, string email, CancellationToken cancellationToken = default)
