@@ -28,6 +28,10 @@ public class AppDbContext : DbContext
             e.Property(p => p.Title).HasMaxLength(200);
             e.Property(p => p.Slug).HasMaxLength(200);
             e.Property(p => p.Blocks).HasColumnType("jsonb");
+            // Tags map to a Postgres text[] — a GIN index lets `tag = ANY(tags)`
+            // queries stay fast when the post count grows.
+            e.Property(p => p.Tags).HasColumnType("text[]");
+            e.HasIndex(p => p.Tags).HasMethod("gin");
             e.HasOne(p => p.Author)
                 .WithMany(u => u.Posts)
                 .HasForeignKey(p => p.AuthorId)

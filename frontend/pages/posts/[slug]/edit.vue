@@ -7,7 +7,7 @@ definePageMeta({ middleware: 'admin' })
 type PostFull = {
   id: string; title: string; slug: string;
   blocks: PostDocument; createdAt: string; updatedAt: string;
-  published: boolean; author: string
+  published: boolean; author: string; tags: string[]
 }
 
 const route = useRoute()
@@ -17,8 +17,13 @@ const rpc = useRpc()
 const id = ref('')
 const title = ref('')
 const slug = ref('')
+const tagsInput = ref('')
 const doc = ref<PostDocument>({ blocks: [] })
 const published = ref(false)
+
+function parseTags(s: string): string[] {
+  return s.split(/[,\s]+/).map(t => t.trim()).filter(Boolean)
+}
 
 const loading = ref(true)
 const saving = ref(false)
@@ -31,6 +36,7 @@ onMounted(async () => {
     id.value = post.id
     title.value = post.title
     slug.value = post.slug
+    tagsInput.value = (post.tags ?? []).join(', ')
     doc.value = post.blocks ?? { blocks: [] }
     published.value = post.published
   } catch (e) {
@@ -50,6 +56,7 @@ async function save(nextPublished?: boolean) {
       title: title.value,
       slug: slug.value,
       blocks: doc.value,
+      tags: parseTags(tagsInput.value),
       published: target
     })
     published.value = target
@@ -87,6 +94,7 @@ async function remove() {
       <div class="space-y-3 mb-6">
         <input v-model="title" placeholder="title" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
         <input v-model="slug" placeholder="slug" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
+        <input v-model="tagsInput" placeholder="tags (comma-separated)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
         <div class="text-xs text-zinc-500">
           status: <span :class="published ? 'text-cyan-400' : 'text-yellow-400'">{{ published ? 'published' : 'draft' }}</span>
         </div>

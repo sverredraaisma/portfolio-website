@@ -1,19 +1,44 @@
 <script setup lang="ts">
 import { formatTime } from '~/composables/useDate'
 
-type PostSummary = { id: string; title: string; slug: string; createdAt: string; author: string }
+type PostSummary = {
+  id: string
+  title: string
+  slug: string
+  createdAt: string
+  author: string
+  tags: string[]
+}
 type PostsPage = { items: PostSummary[]; page: number; pageSize: number; hasMore: boolean }
 
 const PAGE_SIZE = 20
+const route = useRoute()
+const router = useRouter()
 const rpc = useRpc()
+
+// Query state — backed by the URL so deep-links and back/forward work. The
+// ref mirrors route.query and writes back on debounce.
+const q = ref<string>(String(route.query.q ?? ''))
+const tag = ref<string>(String(route.query.tag ?? ''))
 
 const posts = ref<PostSummary[]>([])
 const page = ref(1)
 const hasMore = ref(false)
+const loading = ref(false)
 const loadingMore = ref(false)
 
-const { data: initial } = await useAsyncData<PostsPage>('posts:1',
-  () => rpc.call<PostsPage>('posts.list', { page: 1, pageSize: PAGE_SIZE }))
+function requestParams(nextPage: number) {
+  return {
+    page: nextPage,
+    pageSize: PAGE_SIZE,
+    ...(q.value ? { q: q.value } : {}),
+    ...(tag.value ? { tag: tag.value } : {})
+  }
+}
+
+const initialKey = `posts:initial:${q.value}:${tag.value}`
+const { data: initial } = await useAsyncData<PostsPage>(initialKey,
+  () => rpc.call<PostsPage>('posts.list', requestParams(1)))
 
 if (initial.value) {
   posts.value = initial.value.items
@@ -21,14 +46,23 @@ if (initial.value) {
   hasMore.value = initial.value.hasMore
 }
 
+async function refresh() {
+  loading.value = true
+  try {
+    const res = await rpc.call<PostsPage>('posts.list', requestParams(1))
+    posts.value = res.items
+    page.value = res.page
+    hasMore.value = res.hasMore
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadMore() {
   if (loadingMore.value || !hasMore.value) return
   loadingMore.value = true
   try {
-    const next = await rpc.call<PostsPage>('posts.list', {
-      page: page.value + 1,
-      pageSize: PAGE_SIZE
-    })
+    const next = await rpc.call<PostsPage>('posts.list', requestParams(page.value + 1))
     posts.value = [...posts.value, ...next.items]
     page.value = next.page
     hasMore.value = next.hasMore
@@ -36,19 +70,70 @@ async function loadMore() {
     loadingMore.value = false
   }
 }
+
+// Debounced URL + fetch when the search box changes.
+let debounce: ReturnType<typeof setTimeout> | null = null
+watch(q, (v) => {
+  if (debounce) clearTimeout(debounce)
+  debounce = setTimeout(() => {
+    router.replace({ query: { ...(v ? { q: v } : {}), ...(tag.value ? { tag: tag.value } : {}) } })
+    refresh()
+  }, 200)
+})
+
+function clearTag() {
+  tag.value = ''
+  router.replace({ query: { ...(q.value ? { q: q.value } : {}) } })
+  refresh()
+}
+
+// React to back/forward swapping tag in the URL.
+watch(() => route.query.tag, (v) => {
+  const s = String(v ?? '')
+  if (s !== tag.value) {
+    tag.value = s
+    refresh()
+  }
+})
 </script>
 
 <template>
   <section class="max-w-3xl mx-auto px-6 py-10">
-    <h1 class="text-2xl text-cyan-400 mb-6">$ ls posts/</h1>
-    <ul class="space-y-3">
+    <div class="flex items-center justify-between mb-4 gap-3">
+      <h1 class="text-2xl text-cyan-400">$ ls posts/</h1>
+      <input
+        v-model="q"
+        placeholder="search title..."
+        class="flex-1 max-w-xs bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-1 text-sm"
+      />
+    </div>
+
+    <div v-if="tag" class="mb-3 text-xs flex items-center gap-2">
+      <span class="text-zinc-500">filtered by tag:</span>
+      <span class="inline-flex items-center gap-1 bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 rounded px-2 py-0.5">
+        #{{ tag }}
+        <button @click="clearTag" class="hover:text-red-400" title="clear">✕</button>
+      </span>
+    </div>
+
+    <p v-if="loading" class="text-zinc-500 text-sm">loading...</p>
+
+    <ul v-else class="space-y-3">
       <li v-for="p in posts" :key="p.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-4 hover:border-cyan-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
           <div class="text-lg">{{ p.title }}</div>
           <div class="text-xs text-zinc-500">{{ formatTime(p.createdAt) }} · {{ p.author }}</div>
         </NuxtLink>
+        <div v-if="p.tags?.length" class="mt-2 flex flex-wrap gap-1">
+          <NuxtLink
+            v-for="t in p.tags"
+            :key="t"
+            :to="{ path: '/posts', query: { tag: t } }"
+            class="text-xs bg-zinc-100 dark:bg-zinc-900 hover:bg-cyan-100 dark:hover:bg-cyan-950 hover:text-cyan-700 dark:hover:text-cyan-300 rounded px-2 py-0.5 text-zinc-600 dark:text-zinc-400"
+          >#{{ t }}</NuxtLink>
+        </div>
       </li>
-      <li v-if="!posts.length" class="text-zinc-500">No posts yet.</li>
+      <li v-if="!posts.length" class="text-zinc-500">No posts match.</li>
     </ul>
 
     <div v-if="hasMore" class="mt-6 flex justify-center">

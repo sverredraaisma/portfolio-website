@@ -15,6 +15,12 @@ public sealed record PostListParams
     /// When true, drafts are included in the result. Honoured only for admins;
     /// non-admins see published posts regardless.
     public bool IncludeDrafts { get; init; } = false;
+    /// Substring match against the post title (case-insensitive). Trimmed and
+    /// length-capped server-side; ignored when empty.
+    public string? Q { get; init; }
+    /// Exact tag match — only posts whose Tags column contains this value
+    /// are returned. Compared lowercase.
+    public string? Tag { get; init; }
 }
 
 public sealed record GetPostParams
@@ -28,6 +34,7 @@ public sealed record CreatePostParams
     public required string Slug { get; init; }
     public required JsonElement Blocks { get; init; }
     public bool Published { get; init; } = false;
+    public IReadOnlyList<string>? Tags { get; init; }
 }
 
 public sealed record UpdatePostParams
@@ -37,6 +44,7 @@ public sealed record UpdatePostParams
     public string? Slug { get; init; }
     public JsonElement? Blocks { get; init; }
     public bool? Published { get; init; }
+    public IReadOnlyList<string>? Tags { get; init; }
 }
 
 public sealed record DeletePostParams
@@ -51,7 +59,7 @@ public sealed record UploadImageParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published);
+public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, IReadOnlyList<string> Tags);
 
 public sealed record PostDetail(
     Guid Id,
@@ -61,7 +69,8 @@ public sealed record PostDetail(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     bool Published,
-    string Author);
+    string Author,
+    IReadOnlyList<string> Tags);
 
 public sealed record CreatePostResult(Guid Id, string Slug);
 
@@ -96,12 +105,31 @@ public class PostMethods
         var query = _db.Posts.AsNoTracking().AsQueryable();
         if (!showDrafts) query = query.Where(post => post.Published);
 
+        // Search: substring match on title, trimmed and capped to keep large
+        // pasted blobs from chewing CPU. ILIKE is the case-insensitive
+        // Postgres operator EF translates from EF.Functions.ILike.
+        if (!string.IsNullOrWhiteSpace(p.Q))
+        {
+            var needle = p.Q.Trim();
+            if (needle.Length > 200) needle = needle[..200];
+            var pattern = "%" + EscapeLike(needle) + "%";
+            query = query.Where(post => EF.Functions.ILike(post.Title, pattern));
+        }
+
+        // Tag filter — exact membership. Tag values are stored lowercase, so
+        // normalise the input before comparing.
+        if (!string.IsNullOrWhiteSpace(p.Tag))
+        {
+            var tag = p.Tag.Trim().ToLowerInvariant();
+            query = query.Where(post => post.Tags.Contains(tag));
+        }
+
         // Fetch one extra row so HasMore can be computed without a COUNT(*).
         var rows = await query
             .OrderByDescending(post => post.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
-            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username, post.Published))
+            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username, post.Published, post.Tags))
             .ToListAsync(ctx.CancellationToken);
 
         var hasMore = rows.Count > pageSize;
@@ -109,6 +137,11 @@ public class PostMethods
 
         return new PaginatedResult<PostSummary>(rows, page, pageSize, hasMore);
     }
+
+    // ILIKE special chars: backslash, %, _. Escape them with backslash so a
+    // literal "%" in user input matches itself.
+    private static string EscapeLike(string s) =>
+        s.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
 
     public async Task<PostDetail> Get(GetPostParams p, RpcContext ctx)
     {
@@ -135,7 +168,8 @@ public class PostMethods
             post.CreatedAt,
             post.UpdatedAt,
             post.Published,
-            post.Author!.Username);
+            post.Author!.Username,
+            post.Tags);
     }
 
     public async Task<CreatePostResult> Create(CreatePostParams p, RpcContext ctx)
@@ -153,7 +187,8 @@ public class PostMethods
             Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200)),
             Blocks = JsonDocument.Parse(blocksRaw),
             Published = p.Published,
-            AuthorId = userId
+            AuthorId = userId,
+            Tags = NormaliseTags(p.Tags)
         };
         _db.Posts.Add(post);
         await _db.SaveChangesAsync(ctx.CancellationToken);
@@ -179,6 +214,7 @@ public class PostMethods
             post.Blocks = JsonDocument.Parse(raw);
         }
         if (p.Published.HasValue) post.Published = p.Published.Value;
+        if (p.Tags is not null) post.Tags = NormaliseTags(p.Tags);
         post.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ctx.CancellationToken);
@@ -223,6 +259,27 @@ public class PostMethods
         if (string.IsNullOrWhiteSpace(v)) throw new InvalidOperationException($"{name} required");
         if (v.Length > maxLen) throw new InvalidOperationException($"{name} too long (max {maxLen})");
         return v;
+    }
+
+    // Tag rules: lowercase, alphanumerics + dashes, max 32 chars per tag,
+    // max 8 tags per post. Duplicates and empties dropped; the order the user
+    // supplied is preserved so editor reordering survives.
+    private static List<string> NormaliseTags(IReadOnlyList<string>? raw)
+    {
+        if (raw is null) return new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>(Math.Min(raw.Count, 8));
+        foreach (var t in raw)
+        {
+            if (string.IsNullOrWhiteSpace(t)) continue;
+            var cleaned = new string(t.Trim().ToLowerInvariant()
+                .Where(c => char.IsLetterOrDigit(c) || c == '-')
+                .ToArray());
+            if (cleaned.Length == 0 || cleaned.Length > 32) continue;
+            if (seen.Add(cleaned)) result.Add(cleaned);
+            if (result.Count >= 8) break;
+        }
+        return result;
     }
 
     // Slugs feed the URL — keep them to a safe character set.

@@ -9,9 +9,15 @@ const rpc = useRpc()
 
 const title = ref('')
 const slug = ref('')
+const tagsInput = ref('')
 const doc = ref<PostDocument>({ blocks: [] })
 const saving = ref(false)
 const error = ref('')
+
+// Comma- or space-separated; the backend normalises and dedupes anyway.
+function parseTags(s: string): string[] {
+  return s.split(/[,\s]+/).map(t => t.trim()).filter(Boolean)
+}
 
 async function save(published: boolean) {
   saving.value = true
@@ -21,6 +27,7 @@ async function save(published: boolean) {
       title: title.value,
       slug: slug.value || title.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
       blocks: doc.value,
+      tags: parseTags(tagsInput.value),
       published
     })
     router.push(published ? `/posts/${res.slug}` : '/admin/posts')
@@ -38,6 +45,7 @@ async function save(published: boolean) {
     <div class="space-y-3 mb-6">
       <input v-model="title" placeholder="title" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
       <input v-model="slug" placeholder="slug (optional)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
+      <input v-model="tagsInput" placeholder="tags (comma-separated, e.g. rust, design)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
     </div>
 
     <PostBuilder v-model="doc" />

@@ -19,4 +19,9 @@ public class Post
     public User? Author { get; set; }
 
     public List<Comment> Comments { get; set; } = new();
+
+    /// Free-form short labels (e.g. "rust", "design"). Stored as a normalised
+    /// list; treated case-insensitively. Persisted as a Postgres text[] column
+    /// rather than a join table — there are no per-tag rows or counts to keep.
+    public List<string> Tags { get; set; } = new();
 }

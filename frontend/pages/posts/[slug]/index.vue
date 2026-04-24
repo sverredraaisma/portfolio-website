@@ -8,7 +8,7 @@ import { useAuthStore } from '~/stores/auth'
 
 type PostFull = {
   id: string; title: string; slug: string;
-  blocks: PostDocument; createdAt: string; updatedAt: string; author: string
+  blocks: PostDocument; createdAt: string; updatedAt: string; author: string; tags: string[]
 }
 const route = useRoute()
 const rpc = useRpc()
@@ -52,6 +52,15 @@ useSeoMeta({
         class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-700 text-zinc-400 hover:text-cyan-400"
       >edit</NuxtLink>
     </header>
+
+    <div v-if="post.tags?.length" class="mb-6 flex flex-wrap gap-1">
+      <NuxtLink
+        v-for="t in post.tags"
+        :key="t"
+        :to="{ path: '/posts', query: { tag: t } }"
+        class="text-xs bg-zinc-100 dark:bg-zinc-900 hover:bg-cyan-100 dark:hover:bg-cyan-950 hover:text-cyan-700 dark:hover:text-cyan-300 rounded px-2 py-0.5 text-zinc-600 dark:text-zinc-400"
+      >#{{ t }}</NuxtLink>
+    </div>
 
     <div class="space-y-6">
       <BlockRenderer v-for="b in post.blocks.blocks" :key="b.id" :block="b" />
