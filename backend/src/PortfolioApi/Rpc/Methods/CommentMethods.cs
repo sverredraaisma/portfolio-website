@@ -84,7 +84,10 @@ public class CommentMethods
 
         var c = await _db.Comments.FindAsync(new object?[] { p.Id }, ctx.CancellationToken)
             ?? throw new InvalidOperationException("Comment not found");
-        if (c.AuthorId != userId) throw new AuthFailedException("Not your comment");
+
+        // Authors can delete their own; admins can delete any (moderation).
+        if (c.AuthorId != userId && !ctx.IsAdmin)
+            throw new AuthFailedException("Not your comment");
 
         _db.Comments.Remove(c);
         await _db.SaveChangesAsync(ctx.CancellationToken);

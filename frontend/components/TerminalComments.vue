@@ -8,6 +8,7 @@ type Comment = {
   createdAt: string
   author: string
   authorIsAdmin: boolean
+  authorId?: string
 }
 
 type CommentsPage = {
@@ -47,6 +48,23 @@ watch(() => comments.value.length, () => {
   scrollToBottom()
 })
 
+function canDelete(c: Comment) {
+  if (!auth.isAuthenticated) return false
+  if (auth.user?.isAdmin) return true
+  // Best-effort: backend doesn't currently return authorId, so non-admins
+  // see their own comments by username match. Safe — the backend re-checks.
+  return c.author === auth.user?.username
+}
+
+async function remove(c: Comment) {
+  try {
+    await rpc.call<void>('comments.delete', { id: c.id })
+    comments.value = comments.value.filter(x => x.id !== c.id)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 async function send() {
   const body = draft.value.trim()
   if (!body) return
@@ -78,13 +96,21 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
 <template>
   <div class="bg-black border border-green-900 rounded p-4 text-sm leading-6 text-green-300">
     <div ref="scroller" class="space-y-1 max-h-80 overflow-y-auto">
-      <div v-for="c in comments" :key="c.id">
-        <span class="text-green-600">[{{ formatTime(c.createdAt) }}]</span>
-        <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-green-600'">
-          {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
-        </span>
-        <span class="text-zinc-500"> &gt; </span>
-        <span class="whitespace-pre-wrap">{{ c.body }}</span>
+      <div v-for="c in comments" :key="c.id" class="group flex items-start">
+        <div class="flex-1">
+          <span class="text-green-600">[{{ formatTime(c.createdAt) }}]</span>
+          <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-green-600'">
+            {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
+          </span>
+          <span class="text-zinc-500"> &gt; </span>
+          <span class="whitespace-pre-wrap">{{ c.body }}</span>
+        </div>
+        <button
+          v-if="canDelete(c)"
+          @click="remove(c)"
+          class="ml-2 text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 text-xs"
+          :title="auth.user?.isAdmin && c.author !== auth.user?.username ? 'delete (mod)' : 'delete'"
+        >✕</button>
       </div>
       <div v-if="!comments.length" class="text-zinc-600">// no comments. be the first.</div>
     </div>
