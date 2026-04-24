@@ -53,6 +53,8 @@ public static class ServiceCollectionExtensions
         // signs/verifies share the same parameters.
         services.AddSingleton<ISigningService, FalconSigningService>();
         services.AddSingleton<ITotpService, TotpService>();
+        // Singleton: per-username failure counter is process-wide state.
+        services.AddSingleton<ILoginThrottle, LoginThrottle>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IAuditService, AuditService>();

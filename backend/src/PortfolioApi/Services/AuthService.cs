@@ -30,15 +30,17 @@ public class AuthService : IAuthService
     private readonly IEmailService _email;
     private readonly ITotpService _totp;
     private readonly IAuditService _audit;
+    private readonly ILoginThrottle _throttle;
     private readonly JwtOptions _jwtOpt;
 
-    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, ITotpService totp, IAuditService audit, IOptions<JwtOptions> jwtOpt)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, ITotpService totp, IAuditService audit, ILoginThrottle throttle, IOptions<JwtOptions> jwtOpt)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
         _totp = totp;
         _audit = audit;
+        _throttle = throttle;
         _jwtOpt = jwtOpt.Value;
     }
 
@@ -87,17 +89,33 @@ public class AuthService : IAuthService
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
+        // Per-username throttle. Throws AuthFailedException with the same code
+        // the router maps to 401 — same shape as bad creds, so an attacker
+        // can't tell from the outside whether they're locked out vs wrong.
+        _throttle.EnsureNotLocked(username);
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
         if (user is null)
         {
             // Run a dummy hash so the response time matches the success path —
             // mitigates username-enumeration via timing.
             _ = Argon2(HexToBytes(clientHashHex), new byte[SaltSize]);
+            _throttle.RecordFailure(username);
             return null;
         }
 
         var attempt = Argon2(HexToBytes(clientHashHex), user.PasswordSalt);
-        return CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash) ? user : null;
+        if (!CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash))
+        {
+            _throttle.RecordFailure(username);
+            return null;
+        }
+
+        // Note: we do NOT clear the throttle here — TOTP-enabled accounts
+        // still have a second factor to clear before the login is final. The
+        // throttle is cleared by the caller (BeginLoginAsync / CompleteTotpAsync)
+        // once the full handshake succeeds.
+        return user;
     }
 
     public async Task<LoginStageResult> BeginLoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default)
@@ -110,9 +128,13 @@ public class AuthService : IAuthService
         // the TOTP fork.
         if (user.TotpEnabledAt is not null)
         {
+            // Don't clear the throttle yet — the second factor still has to
+            // succeed. CompleteTotp clears once the whole handshake is done.
             var challenge = _jwt.CreateTotpChallengeToken(user.Id);
             return new LoginStageResult(null, challenge);
         }
+
+        _throttle.Clear(username);
         return new LoginStageResult(user, null);
     }
 
@@ -129,6 +151,10 @@ public class AuthService : IAuthService
         if (user.TotpEnabledAt is null || user.TotpSecret is null)
             throw new AuthFailedException("TOTP is not enabled");
 
+        // Throttle the TOTP step too — otherwise an attacker who gets the
+        // password (or steals a challenge) can grind 6-digit codes freely.
+        _throttle.EnsureNotLocked(user.Username);
+
         var trimmed = (code ?? "").Trim();
 
         // Branch on shape: 6 digits → TOTP code; anything else → try recovery.
@@ -136,22 +162,36 @@ public class AuthService : IAuthService
         // leak through the recovery path and vice versa.
         if (trimmed.Length == 6 && trimmed.All(char.IsDigit))
         {
-            if (_totp.Verify(user.TotpSecret, trimmed)) return user;
+            if (_totp.Verify(user.TotpSecret, trimmed))
+            {
+                _throttle.Clear(user.Username);
+                return user;
+            }
+            _throttle.RecordFailure(user.Username);
             throw new AuthFailedException("Invalid TOTP code");
         }
 
         // Recovery code: normalise (uppercase, drop dashes/spaces), look up
         // the SHA-256, mark used. Single-use.
         var normalised = NormaliseRecoveryCode(trimmed);
-        if (normalised.Length == 0) throw new AuthFailedException("Invalid code");
+        if (normalised.Length == 0)
+        {
+            _throttle.RecordFailure(user.Username);
+            throw new AuthFailedException("Invalid code");
+        }
 
         var hash = SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(normalised));
         var match = await _db.RecoveryCodes
             .FirstOrDefaultAsync(r => r.UserId == userId && r.UsedAt == null && r.CodeHash == hash, cancellationToken);
-        if (match is null) throw new AuthFailedException("Invalid code");
+        if (match is null)
+        {
+            _throttle.RecordFailure(user.Username);
+            throw new AuthFailedException("Invalid code");
+        }
 
         match.UsedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+        _throttle.Clear(user.Username);
         return user;
     }
 
