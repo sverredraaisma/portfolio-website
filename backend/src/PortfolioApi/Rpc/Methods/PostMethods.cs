@@ -282,13 +282,30 @@ public class PostMethods
         return result;
     }
 
-    // Slugs feed the URL — keep them to a safe character set.
+    // Slugs feed the URL — keep them to a safe character set. Collapses runs
+    // of dashes so "hello, world!" becomes "hello-world" rather than the
+    // uglier "hello--world".
     private static string NormaliseSlug(string s)
     {
-        var slug = new string(s.ToLowerInvariant()
+        var raw = new string(s.ToLowerInvariant()
             .Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '-')
-            .ToArray())
-            .Trim('-');
+            .ToArray());
+        var sb = new System.Text.StringBuilder(raw.Length);
+        var prevDash = false;
+        foreach (var c in raw)
+        {
+            if (c == '-')
+            {
+                if (!prevDash) sb.Append('-');
+                prevDash = true;
+            }
+            else
+            {
+                sb.Append(c);
+                prevDash = false;
+            }
+        }
+        var slug = sb.ToString().Trim('-');
         if (slug.Length == 0) throw new InvalidOperationException("slug must contain letters or digits");
         // Avoid colliding with the file-routed /posts/new editor.
         if (slug == "new") throw new InvalidOperationException("slug 'new' is reserved");
