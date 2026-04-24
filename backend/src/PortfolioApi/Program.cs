@@ -83,7 +83,12 @@ using (var scope = app.Services.CreateScope())
 // Apply X-Forwarded-* before anything that reads RemoteIpAddress or Scheme.
 app.UseForwardedHeaders();
 
-// Basic security headers on every response.
+// Basic security headers on every response. CSP is intentionally relaxed:
+// the SPA bundles its JS inline at runtime in places (Nuxt's hydration
+// payload), so a strict policy needs nonces or hashes to stay compatible.
+// The directives here cover the most common XSS / clickjacking vectors
+// without breaking the Nuxt runtime; a stricter policy can be layered on
+// top by the reverse proxy if needed.
 app.Use(async (ctx, next) =>
 {
     var h = ctx.Response.Headers;
@@ -91,8 +96,15 @@ app.Use(async (ctx, next) =>
     h["X-Frame-Options"] = "DENY";
     h["Referrer-Policy"] = "no-referrer";
     h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    h["Cross-Origin-Opener-Policy"] = "same-origin";
+    h["Cross-Origin-Resource-Policy"] = "same-origin";
     await next();
 });
+
+// Liveness probe. Cheap, no DB hit — answers "is the process up?". Compose
+// healthchecks and external monitors can poll this without rate limits or
+// auth in their way.
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.UseRateLimiter();
 app.UseCors();
