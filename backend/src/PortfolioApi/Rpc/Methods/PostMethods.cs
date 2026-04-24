@@ -12,6 +12,9 @@ public sealed record PostListParams
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    /// When true, drafts are included in the result. Honoured only for admins;
+    /// non-admins see published posts regardless.
+    public bool IncludeDrafts { get; init; } = false;
 }
 
 public sealed record GetPostParams
@@ -48,7 +51,7 @@ public sealed record UploadImageParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author);
+public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published);
 
 public sealed record PostDetail(
     Guid Id,
@@ -86,14 +89,19 @@ public class PostMethods
         var page = p.Page < 1 ? 1 : p.Page;
         var pageSize = Math.Clamp(p.PageSize, 1, 50);
 
+        // Drafts are admin-only. Silently ignore the flag for non-admins so a
+        // crafted request can't bypass the gate.
+        var showDrafts = p.IncludeDrafts && ctx.IsAdmin;
+
+        var query = _db.Posts.AsNoTracking().AsQueryable();
+        if (!showDrafts) query = query.Where(post => post.Published);
+
         // Fetch one extra row so HasMore can be computed without a COUNT(*).
-        var rows = await _db.Posts
-            .AsNoTracking()
-            .Where(post => post.Published)
+        var rows = await query
             .OrderByDescending(post => post.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
-            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username))
+            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username, post.Published))
             .ToListAsync(ctx.CancellationToken);
 
         var hasMore = rows.Count > pageSize;

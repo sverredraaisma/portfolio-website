@@ -13,7 +13,7 @@ const doc = ref<PostDocument>({ blocks: [] })
 const saving = ref(false)
 const error = ref('')
 
-async function publish() {
+async function save(published: boolean) {
   saving.value = true
   error.value = ''
   try {
@@ -21,9 +21,9 @@ async function publish() {
       title: title.value,
       slug: slug.value || title.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
       blocks: doc.value,
-      published: true
+      published
     })
-    router.push(`/posts/${res.slug}`)
+    router.push(published ? `/posts/${res.slug}` : '/admin/posts')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -43,7 +43,10 @@ async function publish() {
     <PostBuilder v-model="doc" />
 
     <div class="mt-6 flex items-center gap-3">
-      <button :disabled="saving" @click="publish" class="bg-green-600 hover:bg-green-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50">
+      <button :disabled="saving" @click="save(false)" class="bg-zinc-700 hover:bg-zinc-600 text-green-300 rounded px-4 py-2 disabled:opacity-50">
+        {{ saving ? '...' : 'save draft' }}
+      </button>
+      <button :disabled="saving" @click="save(true)" class="bg-green-600 hover:bg-green-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50">
         {{ saving ? '...' : 'publish' }}
       </button>
       <span v-if="error" class="text-red-400 text-sm">{{ error }}</span>
