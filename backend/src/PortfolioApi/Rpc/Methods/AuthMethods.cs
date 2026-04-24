@@ -61,6 +61,17 @@ public sealed record ConfirmEmailChangeParams
     public required string Token { get; init; }
 }
 
+public sealed record CompleteTotpParams
+{
+    public required string Challenge { get; init; }
+    public required string Code { get; init; }
+}
+
+public sealed record TotpCodeParams
+{
+    public required string Code { get; init; }
+}
+
 public sealed record ResetPasswordParams
 {
     public required string Token { get; init; }
@@ -73,6 +84,15 @@ public sealed record UserDto(Guid Id, string Username, string Email, bool EmailV
 public sealed record RegisterResult(Guid Id, string Username, bool EmailVerified);
 public sealed record AuthSuccess(string AccessToken, string RefreshToken, UserDto User);
 public sealed record VerifyResult(bool Verified);
+
+/// Either auth completes (Tokens populated) or a TOTP step is required
+/// (Challenge populated). Exactly one of the two is non-null.
+public sealed record LoginResponse(AuthSuccess? Tokens, string? Challenge)
+{
+    public bool RequiresTotp => Challenge is not null;
+}
+
+public sealed record TotpEnrolmentDto(string OtpAuthUri, string SecretBase32);
 
 public class AuthMethods
 {
@@ -95,10 +115,20 @@ public class AuthMethods
         return new RegisterResult(user.Id, user.Username, EmailVerified: false);
     }
 
-    public async Task<AuthSuccess> Login(LoginParams p, RpcContext ctx)
+    public async Task<LoginResponse> Login(LoginParams p, RpcContext ctx)
     {
-        var user = await _auth.LoginAsync(p.Username, p.ClientHash, ctx.CancellationToken);
-        if (user is null) throw new AuthFailedException("Invalid credentials");
+        var stage = await _auth.BeginLoginAsync(p.Username, p.ClientHash, ctx.CancellationToken);
+
+        if (stage.RequiresTotp)
+        {
+            // Password was correct but TOTP is required — bounce the client
+            // through auth.completeTotp. Email-verification check happens at
+            // the second step so we don't leak the unverified state to a
+            // caller who hasn't yet proven possession of the second factor.
+            return new LoginResponse(null, stage.ChallengeToken);
+        }
+
+        var user = stage.User ?? throw new AuthFailedException("Invalid credentials");
 
         if (user.EmailVerifiedAt is null)
         {
@@ -107,13 +137,48 @@ public class AuthMethods
             throw new InvalidOperationException("Email not verified");
         }
 
+        return new LoginResponse(await IssueSession(user, ctx), null);
+    }
+
+    public async Task<LoginResponse> CompleteTotp(CompleteTotpParams p, RpcContext ctx)
+    {
+        var user = await _auth.CompleteTotpAsync(p.Challenge, p.Code, ctx.CancellationToken);
+
+        if (user.EmailVerifiedAt is null)
+            throw new InvalidOperationException("Email not verified");
+
+        return new LoginResponse(await IssueSession(user, ctx), null);
+    }
+
+    private async Task<AuthSuccess> IssueSession(PortfolioApi.Models.User user, RpcContext ctx)
+    {
         var access = _jwt.CreateAccessToken(user.Id, user.Username, user.IsAdmin);
         var (refresh, _) = await _auth.IssueRefreshTokenAsync(user.Id, ctx.CancellationToken);
-
         return new AuthSuccess(
             access,
             refresh,
             new UserDto(user.Id, user.Username, user.Email, EmailVerified: true, user.IsAdmin));
+    }
+
+    public async Task<TotpEnrolmentDto> TotpStart(RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var enrol = await _auth.StartTotpEnrolmentAsync(userId, ctx.CancellationToken);
+        return new TotpEnrolmentDto(enrol.OtpAuthUri, enrol.Base32Secret);
+    }
+
+    public async Task<OkResult> TotpConfirm(TotpCodeParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _auth.ConfirmTotpEnrolmentAsync(userId, p.Code, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> TotpDisable(TotpCodeParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _auth.DisableTotpAsync(userId, p.Code, ctx.CancellationToken);
+        return new OkResult();
     }
 
     public async Task<AuthSuccess> Refresh(RefreshParams p, RpcContext ctx)

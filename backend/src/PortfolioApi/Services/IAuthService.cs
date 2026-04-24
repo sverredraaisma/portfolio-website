@@ -4,10 +4,49 @@ namespace PortfolioApi.Services;
 
 public record AuthTokens(string AccessToken, string RefreshToken);
 
+/// Result of a password-stage login. Either the credentials are good *and* no
+/// TOTP is enrolled (then User is set), or TOTP is required (then ChallengeToken
+/// is set and the caller should ask the user for a code), or auth fails (and
+/// the service throws).
+public sealed record LoginStageResult(User? User, string? ChallengeToken)
+{
+    public bool RequiresTotp => ChallengeToken is not null;
+}
+
+/// Outcome of an enrolment request. The Base32 secret is shown to the user
+/// once for manual entry into authenticator apps that can't read QR codes;
+/// the OtpAuthUri is what the QR encodes.
+public sealed record TotpEnrolment(string OtpAuthUri, string Base32Secret);
+
 public interface IAuthService
 {
     Task<User> RegisterAsync(string username, string email, string clientHashHex, CancellationToken cancellationToken = default);
     Task<User?> LoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default);
+
+    /// Same as LoginAsync but TOTP-aware: when the account has TOTP enabled,
+    /// returns a challenge token instead of the user; the caller should then
+    /// hand the token back via CompleteTotpAsync alongside the user's code.
+    Task<LoginStageResult> BeginLoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default);
+
+    /// Validates a (challenge, code) pair from the second login step.
+    /// Returns the user on success; throws AuthFailedException on bad/expired
+    /// challenge or wrong code.
+    Task<User> CompleteTotpAsync(string challengeToken, string code, CancellationToken cancellationToken = default);
+
+    /// Begins a TOTP enrolment for the authenticated user. Persists a fresh
+    /// secret as "pending" (TotpSecret set, TotpEnabledAt still NULL) and
+    /// returns the otpauth URI + base32 secret so the client can show a QR
+    /// or fallback. Replaces any unconfirmed in-flight enrolment.
+    Task<TotpEnrolment> StartTotpEnrolmentAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// Verifies the supplied code against the pending secret and marks the
+    /// enrolment confirmed (sets TotpEnabledAt). Throws if no pending
+    /// enrolment exists or the code is wrong.
+    Task ConfirmTotpEnrolmentAsync(Guid userId, string code, CancellationToken cancellationToken = default);
+
+    /// Disables TOTP. Requires a current valid code so an attacker holding a
+    /// stolen access token can't simply wave 2FA off.
+    Task DisableTotpAsync(Guid userId, string code, CancellationToken cancellationToken = default);
     Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default);
 
     /// Re-issues a verification email if an unverified account exists at <paramref name="email"/>.

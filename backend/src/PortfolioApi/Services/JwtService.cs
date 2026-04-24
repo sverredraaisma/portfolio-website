@@ -59,6 +59,17 @@ public class JwtService : IJwtService
         }, TimeSpan.FromHours(_opt.EmailVerifyHours));
     }
 
+    public string CreateTotpChallengeToken(Guid userId)
+    {
+        // Five minutes is generous for a user fishing for their phone but
+        // narrow enough that a stolen ticket has limited value.
+        return Create(new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new Claim("purpose", JwtPurpose.TotpChallenge)
+        }, TimeSpan.FromMinutes(5));
+    }
+
     public ClaimsPrincipal? Validate(string token, string expectedPurpose)
     {
         // Clear the default inbound claim-type map. Without this, JwtSecurityTokenHandler

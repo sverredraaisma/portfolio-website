@@ -45,6 +45,7 @@ public class AccountService : IAccountService
             user.Email,
             user.EmailVerifiedAt is not null,
             user.IsAdmin,
+            user.TotpEnabledAt is not null,
             user.CreatedAt,
             posts,
             comments,

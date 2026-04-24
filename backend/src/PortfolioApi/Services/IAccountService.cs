@@ -22,6 +22,7 @@ public sealed record AccountExport(
     string Email,
     bool EmailVerified,
     bool IsAdmin,
+    bool TotpEnabled,
     DateTime CreatedAt,
     IReadOnlyList<AccountExportPost> Posts,
     IReadOnlyList<AccountExportComment> Comments,

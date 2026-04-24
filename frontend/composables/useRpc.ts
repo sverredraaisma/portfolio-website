@@ -5,7 +5,14 @@ export type RpcError = { code: string; message: string }
 type RpcEnvelope<T> = { result?: T; error?: RpcError }
 type RefreshResult = { accessToken: string; refreshToken: string; user: unknown }
 
-const NO_REFRESH_METHODS = new Set(['auth.refresh', 'auth.login', 'auth.register'])
+const NO_REFRESH_METHODS = new Set([
+  'auth.refresh',
+  'auth.login',
+  'auth.register',
+  // The TOTP step is the second half of login; a 401 on it means the code
+  // (or the challenge) is bad — refreshing a non-existent session won't help.
+  'auth.completeTotp'
+])
 
 // Module-level coalescing: if a refresh is already in flight, every concurrent
 // 401 awaits the same promise instead of stampeding the refresh endpoint.

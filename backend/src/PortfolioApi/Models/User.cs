@@ -17,6 +17,16 @@ public class User
     /// Set on the seeded owner; manually flipped via SQL or a follow-up admin tool.
     public bool IsAdmin { get; set; }
 
+    /// Raw HMAC-SHA1 TOTP secret (RFC 6238). Set when the user starts an
+    /// enrolment; only treated as enforcing once TotpEnabledAt is non-null.
+    /// A pending-but-not-confirmed secret is kept here too — the login code
+    /// path checks the enabled flag, not the presence of the secret.
+    public byte[]? TotpSecret { get; set; }
+
+    /// Timestamp when the user verified the TOTP enrolment. NULL means the
+    /// secret (if any) is just a draft and login does not require a code.
+    public DateTime? TotpEnabledAt { get; set; }
+
     public List<Post> Posts { get; set; } = new();
     public List<Comment> Comments { get; set; } = new();
 }

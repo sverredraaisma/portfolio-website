@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
         // Singleton: the Falcon keypair is loaded once on first use; subsequent
         // signs/verifies share the same parameters.
         services.AddSingleton<ISigningService, FalconSigningService>();
+        services.AddSingleton<ITotpService, TotpService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
 

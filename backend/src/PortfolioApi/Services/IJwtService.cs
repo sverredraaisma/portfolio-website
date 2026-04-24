@@ -12,6 +12,9 @@ public interface IJwtService
     /// trust both fields without a separate database lookup.
     string CreateEmailChangeToken(Guid userId, string newEmail);
 
+    /// 5-minute ticket bridging the password and TOTP steps of login.
+    string CreateTotpChallengeToken(Guid userId);
+
     /// Returns null if the token is invalid, expired, or carries the wrong purpose claim.
     ClaimsPrincipal? Validate(string token, string expectedPurpose);
 }

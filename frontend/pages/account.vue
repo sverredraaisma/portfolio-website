@@ -10,11 +10,14 @@ type AccountExport = {
   email: string
   emailVerified: boolean
   isAdmin: boolean
+  totpEnabled: boolean
   createdAt: string
   posts: Array<{ id: string; title: string; slug: string; createdAt: string; updatedAt: string; published: boolean }>
   comments: Array<{ id: string; postId: string; body: string; createdAt: string }>
   refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>
 }
+
+type TotpEnrolment = { otpAuthUri: string; secretBase32: string }
 
 const auth = useAuthStore()
 const rpc = useRpc()
@@ -44,6 +47,13 @@ const revokeMessage = ref('')
 const newEmail = ref('')
 const requestingEmail = ref(false)
 const emailMessage = ref('')
+
+// TOTP panel state
+const totpEnrolment = ref<TotpEnrolment | null>(null)
+const totpQrDataUrl = ref('')
+const totpCode = ref('')
+const totpBusy = ref(false)
+const totpMessage = ref('')
 
 async function loadExport() {
   loading.value = true
@@ -105,6 +115,69 @@ async function changePassword() {
     pwdMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
     changingPwd.value = false
+  }
+}
+
+async function startTotp() {
+  totpMessage.value = ''
+  totpBusy.value = true
+  try {
+    const enrol = await rpc.call<TotpEnrolment>('auth.totpStart')
+    totpEnrolment.value = enrol
+    // Lazy-load qrcode so it's not in the initial bundle.
+    const QR = await import('qrcode')
+    totpQrDataUrl.value = await QR.toDataURL(enrol.otpAuthUri, { width: 220, margin: 1 })
+  } catch (e) {
+    totpMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    totpBusy.value = false
+  }
+}
+
+async function confirmTotp() {
+  if (!totpCode.value || totpCode.value.length < 6) {
+    totpMessage.value = 'Enter the 6-digit code from your authenticator app.'
+    return
+  }
+  totpBusy.value = true
+  totpMessage.value = ''
+  try {
+    await rpc.call<void>('auth.totpConfirm', { code: totpCode.value })
+    totpEnrolment.value = null
+    totpQrDataUrl.value = ''
+    totpCode.value = ''
+    totpMessage.value = 'TOTP enabled. You will need a code at next login.'
+    await loadExport()
+  } catch (e) {
+    totpMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    totpBusy.value = false
+  }
+}
+
+function cancelTotpEnrolment() {
+  totpEnrolment.value = null
+  totpQrDataUrl.value = ''
+  totpCode.value = ''
+  totpMessage.value = ''
+}
+
+async function disableTotp() {
+  if (!totpCode.value || totpCode.value.length < 6) {
+    totpMessage.value = 'Enter a current 6-digit code to confirm.'
+    return
+  }
+  totpBusy.value = true
+  totpMessage.value = ''
+  try {
+    await rpc.call<void>('auth.totpDisable', { code: totpCode.value })
+    totpCode.value = ''
+    totpMessage.value = 'TOTP disabled.'
+    await loadExport()
+  } catch (e) {
+    totpMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    totpBusy.value = false
   }
 }
 
@@ -184,6 +257,83 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ two-factor (TOTP)</h2>
+        <p class="text-xs text-zinc-500">
+          Status:
+          <span :class="data.totpEnabled ? 'text-cyan-400' : 'text-yellow-500'">
+            {{ data.totpEnabled ? 'enabled' : 'disabled' }}
+          </span>
+        </p>
+
+        <!-- Disabled, no enrolment in flight: enrol button -->
+        <template v-if="!data.totpEnabled && !totpEnrolment">
+          <button
+            :disabled="totpBusy"
+            @click="startTotp"
+            class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+          >{{ totpBusy ? '...' : 'enable 2FA' }}</button>
+        </template>
+
+        <!-- Enrolment in flight: QR + secret + confirmation code -->
+        <template v-else-if="!data.totpEnabled && totpEnrolment">
+          <p class="text-xs text-zinc-500">
+            Scan the QR with an authenticator app (Authy, 1Password, Google Authenticator, …)
+            or paste the secret manually. Then enter the 6-digit code to confirm.
+          </p>
+          <div class="flex flex-wrap gap-4 items-start">
+            <img v-if="totpQrDataUrl" :src="totpQrDataUrl" alt="TOTP QR code" class="rounded bg-white p-1" />
+            <div class="text-xs text-zinc-500 space-y-1 break-all">
+              <div>secret:</div>
+              <code class="block bg-zinc-100 dark:bg-zinc-900 rounded px-2 py-1 text-cyan-400">{{ totpEnrolment.secretBase32 }}</code>
+            </div>
+          </div>
+          <div class="flex gap-2 items-center">
+            <input
+              v-model="totpCode"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="123456"
+              class="w-32 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm font-mono tracking-widest text-center"
+            />
+            <button
+              :disabled="totpBusy"
+              @click="confirmTotp"
+              class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+            >{{ totpBusy ? '...' : 'confirm' }}</button>
+            <button
+              @click="cancelTotpEnrolment"
+              class="text-xs text-zinc-500 hover:text-zinc-300"
+            >cancel</button>
+          </div>
+        </template>
+
+        <!-- Already enabled: disable form -->
+        <template v-else>
+          <p class="text-xs text-zinc-500">
+            To disable, enter a current 6-digit code from your authenticator app.
+          </p>
+          <div class="flex gap-2 items-center">
+            <input
+              v-model="totpCode"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="123456"
+              class="w-32 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm font-mono tracking-widest text-center"
+            />
+            <button
+              :disabled="totpBusy"
+              @click="disableTotp"
+              class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+            >{{ totpBusy ? '...' : 'disable 2FA' }}</button>
+          </div>
+        </template>
+
+        <p v-if="totpMessage" class="text-xs"
+          :class="totpMessage.includes('enabled') || totpMessage.includes('disabled') ? 'text-cyan-400' : 'text-red-400'"
+        >{{ totpMessage }}</p>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ change email</h2>

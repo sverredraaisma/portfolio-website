@@ -48,7 +48,11 @@ public class RpcRouter
 
         // Auth
         Register("auth.register", RpcHandlers.Typed<RegisterParams, RegisterResult>(auth.Register));
-        Register("auth.login", RpcHandlers.Typed<LoginParams, AuthSuccess>(auth.Login));
+        Register("auth.login", RpcHandlers.Typed<LoginParams, LoginResponse>(auth.Login));
+        Register("auth.completeTotp", RpcHandlers.Typed<CompleteTotpParams, LoginResponse>(auth.CompleteTotp));
+        Register("auth.totpStart", RpcHandlers.Typed<TotpEnrolmentDto>(auth.TotpStart));
+        Register("auth.totpConfirm", RpcHandlers.Typed<TotpCodeParams, OkResult>(auth.TotpConfirm));
+        Register("auth.totpDisable", RpcHandlers.Typed<TotpCodeParams, OkResult>(auth.TotpDisable));
         Register("auth.refresh", RpcHandlers.Typed<RefreshParams, AuthSuccess>(auth.Refresh));
         Register("auth.logout", RpcHandlers.Typed<LogoutParams, OkResult>(auth.Logout));
         Register("auth.verifyEmail", RpcHandlers.Typed<VerifyEmailParams, VerifyResult>(auth.VerifyEmail));

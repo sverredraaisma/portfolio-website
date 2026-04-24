@@ -21,13 +21,15 @@ public class AuthService : IAuthService
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly IEmailService _email;
+    private readonly ITotpService _totp;
     private readonly JwtOptions _jwtOpt;
 
-    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, IOptions<JwtOptions> jwtOpt)
+    public AuthService(AppDbContext db, IJwtService jwt, IEmailService email, ITotpService totp, IOptions<JwtOptions> jwtOpt)
     {
         _db = db;
         _jwt = jwt;
         _email = email;
+        _totp = totp;
         _jwtOpt = jwtOpt.Value;
     }
 
@@ -87,6 +89,96 @@ public class AuthService : IAuthService
 
         var attempt = Argon2(HexToBytes(clientHashHex), user.PasswordSalt);
         return CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash) ? user : null;
+    }
+
+    public async Task<LoginStageResult> BeginLoginAsync(string username, string clientHashHex, CancellationToken cancellationToken = default)
+    {
+        var user = await LoginAsync(username, clientHashHex, cancellationToken);
+        if (user is null) return new LoginStageResult(null, null);
+
+        // Email-not-verified is enforced by the caller (AuthMethods.Login)
+        // because the message there is informational; here we only mediate
+        // the TOTP fork.
+        if (user.TotpEnabledAt is not null)
+        {
+            var challenge = _jwt.CreateTotpChallengeToken(user.Id);
+            return new LoginStageResult(null, challenge);
+        }
+        return new LoginStageResult(user, null);
+    }
+
+    public async Task<User> CompleteTotpAsync(string challengeToken, string code, CancellationToken cancellationToken = default)
+    {
+        var principal = _jwt.Validate(challengeToken, expectedPurpose: JwtPurpose.TotpChallenge)
+            ?? throw new AuthFailedException("Invalid or expired challenge");
+        var sub = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        if (!Guid.TryParse(sub, out var userId)) throw new AuthFailedException("Challenge has no subject");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        if (user.TotpEnabledAt is null || user.TotpSecret is null)
+            throw new AuthFailedException("TOTP is not enabled");
+
+        if (!_totp.Verify(user.TotpSecret, code))
+            throw new AuthFailedException("Invalid TOTP code");
+
+        return user;
+    }
+
+    public async Task<TotpEnrolment> StartTotpEnrolmentAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        if (user.TotpEnabledAt is not null)
+            throw new InvalidOperationException("TOTP is already enabled. Disable it first to re-enrol.");
+
+        // Replace any unconfirmed in-flight secret. Since TotpEnabledAt is
+        // still NULL, no live login is depending on the old draft.
+        var secret = _totp.GenerateSecret();
+        user.TotpSecret = secret;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var label = $"{user.Username}";
+        return new TotpEnrolment(
+            OtpAuthUri: _totp.OtpAuthUri(secret, "sverre.dev", label),
+            Base32Secret: _totp.Base32Encode(secret));
+    }
+
+    public async Task ConfirmTotpEnrolmentAsync(Guid userId, string code, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        if (user.TotpSecret is null)
+            throw new InvalidOperationException("Start an enrolment first.");
+        if (user.TotpEnabledAt is not null)
+            throw new InvalidOperationException("TOTP is already enabled.");
+
+        if (!_totp.Verify(user.TotpSecret, code))
+            throw new AuthFailedException("Invalid TOTP code");
+
+        user.TotpEnabledAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DisableTotpAsync(Guid userId, string code, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        if (user.TotpEnabledAt is null || user.TotpSecret is null)
+            throw new InvalidOperationException("TOTP is not enabled.");
+
+        // Require a current code: an attacker with a hijacked access token
+        // shouldn't be able to neuter the second factor in one click.
+        if (!_totp.Verify(user.TotpSecret, code))
+            throw new AuthFailedException("Invalid TOTP code");
+
+        user.TotpSecret = null;
+        user.TotpEnabledAt = null;
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<bool> VerifyEmailAsync(string jwtToken, CancellationToken cancellationToken = default)
