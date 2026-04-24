@@ -15,6 +15,14 @@ public interface IAuthService
     /// account state.
     Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default);
 
+    /// Verifies the current password, sets a new one, and revokes every active
+    /// refresh token for the user so any other session is signed out. Throws
+    /// AuthFailedException if the current password is wrong.
+    Task ChangePasswordAsync(Guid userId, string currentClientHash, string newClientHash, CancellationToken cancellationToken = default);
+
+    /// Revokes every active refresh token for the user — "sign out everywhere".
+    Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
+
     /// Issues a refresh token. Returns the raw token (returned to the client once)
     /// and the persisted record (only the SHA-256 of the token is stored).
     Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default);

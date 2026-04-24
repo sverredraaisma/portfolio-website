@@ -45,6 +45,12 @@ public sealed record ResendVerificationParams
     public required string Email { get; init; }
 }
 
+public sealed record ChangePasswordParams
+{
+    public required string CurrentClientHash { get; init; }
+    public required string NewClientHash { get; init; }
+}
+
 public sealed record ResetPasswordParams
 {
     public required string Token { get; init; }
@@ -133,6 +139,20 @@ public class AuthMethods
     {
         // Same enumeration-resistance pattern as password reset.
         await _auth.ResendVerificationAsync(p.Email, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> ChangePassword(ChangePasswordParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _auth.ChangePasswordAsync(userId, p.CurrentClientHash, p.NewClientHash, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<OkResult> RevokeAllSessions(RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _auth.RevokeAllSessionsAsync(userId, ctx.CancellationToken);
         return new OkResult();
     }
 

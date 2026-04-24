@@ -21,11 +21,12 @@ async function logout() {
       <nav class="flex gap-4 text-sm">
         <NuxtLink to="/posts" class="hover:text-cyan-400">posts</NuxtLink>
         <NuxtLink to="/verify-statement" class="hover:text-cyan-400">verify</NuxtLink>
+        <NuxtLink to="/privacy" class="hover:text-cyan-400">privacy</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/admin/posts" class="hover:text-cyan-400">manage</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/posts/new" class="hover:text-cyan-400">new</NuxtLink>
         <NuxtLink v-if="auth.user?.isAdmin" to="/sign" class="hover:text-cyan-400">sign</NuxtLink>
         <template v-if="auth.isAuthenticated">
-          <span class="text-zinc-500">{{ auth.user?.username }}</span>
+          <NuxtLink to="/account" class="text-zinc-500 hover:text-cyan-400">{{ auth.user?.username }}</NuxtLink>
           <button class="hover:text-red-400" @click="logout">logout</button>
         </template>
         <template v-else>

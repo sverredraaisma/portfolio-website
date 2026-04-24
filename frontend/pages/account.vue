@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import { hashPasswordForTransit } from '~/composables/usePasswordHash'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -27,6 +28,17 @@ const exporting = ref(false)
 const deleting = ref(false)
 const commentStrategy = ref<'anonymise' | 'delete'>('anonymise')
 const confirmText = ref('')
+
+// Change-password panel state
+const currentPwd = ref('')
+const newPwd = ref('')
+const newPwdRepeat = ref('')
+const changingPwd = ref(false)
+const pwdMessage = ref('')
+
+// Sign-out-everywhere
+const revokingAll = ref(false)
+const revokeMessage = ref('')
 
 async function loadExport() {
   loading.value = true
@@ -64,6 +76,47 @@ async function downloadExport() {
 }
 
 const expectedConfirm = computed(() => `delete ${data.value?.username ?? ''}`)
+
+async function changePassword() {
+  pwdMessage.value = ''
+  if (newPwd.value.length < 8) {
+    pwdMessage.value = 'New password must be at least 8 characters.'
+    return
+  }
+  if (newPwd.value !== newPwdRepeat.value) {
+    pwdMessage.value = 'New passwords do not match.'
+    return
+  }
+  changingPwd.value = true
+  try {
+    const currentClientHash = await hashPasswordForTransit(currentPwd.value)
+    const newClientHash = await hashPasswordForTransit(newPwd.value)
+    await rpc.call<void>('auth.changePassword', { currentClientHash, newClientHash })
+    pwdMessage.value = 'Password updated. Other sessions have been signed out.'
+    currentPwd.value = ''
+    newPwd.value = ''
+    newPwdRepeat.value = ''
+  } catch (e) {
+    pwdMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    changingPwd.value = false
+  }
+}
+
+async function revokeAllSessions() {
+  revokeMessage.value = ''
+  revokingAll.value = true
+  try {
+    await rpc.call<void>('auth.revokeAllSessions')
+    // The current session's refresh token was just revoked too; the next 401
+    // will fail to refresh and the rpc client will log us out.
+    revokeMessage.value = 'All sessions revoked. You will be signed out shortly.'
+  } catch (e) {
+    revokeMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    revokingAll.value = false
+  }
+}
 
 async function deleteAccount() {
   if (confirmText.value.trim() !== expectedConfirm.value) {
@@ -108,6 +161,55 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ change password</h2>
+        <div class="space-y-2 text-sm">
+          <input
+            v-model="currentPwd"
+            type="password"
+            placeholder="current password"
+            autocomplete="current-password"
+            class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2"
+          />
+          <input
+            v-model="newPwd"
+            type="password"
+            placeholder="new password (min 8 chars)"
+            autocomplete="new-password"
+            class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2"
+          />
+          <input
+            v-model="newPwdRepeat"
+            type="password"
+            placeholder="repeat new password"
+            autocomplete="new-password"
+            class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2"
+          />
+        </div>
+        <button
+          :disabled="changingPwd || !currentPwd || !newPwd"
+          @click="changePassword"
+          class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50"
+        >{{ changingPwd ? '...' : 'change password' }}</button>
+        <p v-if="pwdMessage" class="text-xs" :class="pwdMessage.startsWith('Password updated') ? 'text-cyan-400' : 'text-red-400'">
+          {{ pwdMessage }}
+        </p>
+      </section>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-2">
+        <h2 class="text-lg text-cyan-400">$ sessions</h2>
+        <p class="text-xs text-zinc-500">
+          You have <span class="text-cyan-400">{{ data.refreshTokens.filter(t => !t.revokedAt && new Date(t.expiresAt) > new Date()).length }}</span>
+          active session(s). Sign out of every device — including this one — at once.
+        </p>
+        <button
+          :disabled="revokingAll"
+          @click="revokeAllSessions"
+          class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50"
+        >{{ revokingAll ? '...' : 'sign out everywhere' }}</button>
+        <p v-if="revokeMessage" class="text-xs text-cyan-400">{{ revokeMessage }}</p>
+      </section>
 
       <section>
         <h2 class="text-lg text-cyan-400 mb-2">$ export</h2>

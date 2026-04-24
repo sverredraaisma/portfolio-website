@@ -105,6 +105,38 @@ public class AuthService : IAuthService
         return true;
     }
 
+    public async Task ChangePasswordAsync(Guid userId, string currentClientHash, string newClientHash, CancellationToken cancellationToken = default)
+    {
+        RejectIfLooksLikeRawPassword(currentClientHash);
+        RejectIfLooksLikeRawPassword(newClientHash);
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        var attempt = Argon2(HexToBytes(currentClientHash), user.PasswordSalt);
+        if (!CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash))
+            throw new AuthFailedException("Current password is incorrect");
+
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+        user.PasswordHash = Argon2(HexToBytes(newClientHash), salt);
+        user.PasswordSalt = salt;
+
+        // Same as password-reset: changing credentials invalidates every
+        // active session so any attacker with a captured token is out.
+        await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+    }
+
     public async Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
