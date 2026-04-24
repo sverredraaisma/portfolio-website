@@ -6,6 +6,10 @@ node_modules/
 .cache/
 dist/
 *.log
+
+# Test coverage reports
+coverage/
+TestResults/
 .env
 .env.*
 !.env.example

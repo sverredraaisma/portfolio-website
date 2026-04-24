@@ -17,7 +17,15 @@ export default defineConfig({
     globals: false,
     // Loaded once per worker before any test file runs. Installs the Nuxt
     // auto-import globals (ref, useRpc, etc.) on globalThis.
-    setupFiles: ['./tests/useStateShim.ts', './tests/nuxtAutoImports.ts']
+    setupFiles: ['./tests/useStateShim.ts', './tests/nuxtAutoImports.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'html'],
+      // Only count what we actually own. node_modules is excluded by
+      // default; .nuxt and .output are generated.
+      include: ['composables/**', 'components/**', 'stores/**', 'pages/**', 'layouts/**'],
+      exclude: ['**/*.d.ts', 'tests/**', '.nuxt/**', '.output/**']
+    }
   },
   resolve: {
     alias: {
