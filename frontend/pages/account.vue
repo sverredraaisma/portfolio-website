@@ -11,11 +11,24 @@ type AccountExport = {
   emailVerified: boolean
   isAdmin: boolean
   totpEnabled: boolean
+  recoveryCodesRemaining: number
   createdAt: string
   posts: Array<{ id: string; title: string; slug: string; createdAt: string; updatedAt: string; published: boolean }>
   comments: Array<{ id: string; postId: string; body: string; createdAt: string }>
   refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>
+  auditEvents: Array<{ id: string; kind: string; detail: string | null; at: string }>
 }
+
+const AUDIT_KIND_LABELS: Record<string, string> = {
+  'password.changed': 'Password changed',
+  'password.reset': 'Password reset',
+  'email.changed': 'Email changed',
+  'totp.enabled': '2FA enabled',
+  'totp.disabled': '2FA disabled',
+  'totp.recoveryCodesRegenerated': 'Recovery codes regenerated',
+  'sessions.revoked': 'All sessions revoked'
+}
+function auditLabel(kind: string) { return AUDIT_KIND_LABELS[kind] ?? kind }
 
 type TotpEnrolment = { otpAuthUri: string; secretBase32: string }
 
@@ -54,6 +67,12 @@ const totpQrDataUrl = ref('')
 const totpCode = ref('')
 const totpBusy = ref(false)
 const totpMessage = ref('')
+
+// Recovery-codes modal: codes are shown ONCE; the user must save them. We
+// keep them in memory only — never persisted to localStorage or refetched.
+const freshRecoveryCodes = ref<string[] | null>(null)
+const regeneratingCodes = ref(false)
+const recoveryError = ref('')
 
 async function loadExport() {
   loading.value = true
@@ -142,17 +161,53 @@ async function confirmTotp() {
   totpBusy.value = true
   totpMessage.value = ''
   try {
-    await rpc.call<void>('auth.totpConfirm', { code: totpCode.value })
+    const res = await rpc.call<{ recoveryCodes: string[] }>('auth.totpConfirm', { code: totpCode.value })
     totpEnrolment.value = null
     totpQrDataUrl.value = ''
     totpCode.value = ''
-    totpMessage.value = 'TOTP enabled. You will need a code at next login.'
+    totpMessage.value = 'TOTP enabled. Save the recovery codes below — they are shown only once.'
+    // Surface the freshly-issued recovery codes so the user can save them.
+    freshRecoveryCodes.value = res.recoveryCodes
     await loadExport()
   } catch (e) {
     totpMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
     totpBusy.value = false
   }
+}
+
+async function regenerateRecoveryCodes() {
+  if (!confirm('Generate a new set? Any unused old codes stop working immediately.')) return
+  regeneratingCodes.value = true
+  recoveryError.value = ''
+  try {
+    const res = await rpc.call<{ codes: string[] }>('auth.totpRegenerateRecoveryCodes')
+    freshRecoveryCodes.value = res.codes
+    await loadExport()
+  } catch (e) {
+    recoveryError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    regeneratingCodes.value = false
+  }
+}
+
+function downloadRecoveryCodes() {
+  if (!freshRecoveryCodes.value) return
+  const text = '# sverre.dev recovery codes\n# Each code can be used once instead of a TOTP code.\n\n'
+    + freshRecoveryCodes.value.join('\n') + '\n'
+  const blob = new Blob([text], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `recovery-codes-${new Date().toISOString().slice(0, 10)}.txt`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function dismissRecoveryCodes() {
+  freshRecoveryCodes.value = null
 }
 
 function cancelTotpEnrolment() {
@@ -309,8 +364,21 @@ async function deleteAccount() {
           </div>
         </template>
 
-        <!-- Already enabled: disable form -->
+        <!-- Already enabled: disable form + recovery codes management -->
         <template v-else>
+          <div class="text-xs text-zinc-500">
+            recovery codes left:
+            <span :class="data.recoveryCodesRemaining < 3 ? 'text-yellow-500' : 'text-cyan-400'">
+              {{ data.recoveryCodesRemaining }}
+            </span>
+            <button
+              :disabled="regeneratingCodes"
+              @click="regenerateRecoveryCodes"
+              class="ml-2 underline hover:text-cyan-400 disabled:opacity-50"
+            >regenerate</button>
+            <span v-if="recoveryError" class="text-red-400 ml-2">{{ recoveryError }}</span>
+          </div>
+
           <p class="text-xs text-zinc-500">
             To disable, enter a current 6-digit code from your authenticator app.
           </p>
@@ -329,6 +397,29 @@ async function deleteAccount() {
             >{{ totpBusy ? '...' : 'disable 2FA' }}</button>
           </div>
         </template>
+
+        <!-- One-time view of freshly-issued recovery codes -->
+        <div v-if="freshRecoveryCodes" class="mt-3 border border-yellow-500 dark:border-yellow-700 rounded p-3 space-y-2">
+          <p class="text-xs text-yellow-500 dark:text-yellow-400 font-bold">
+            Save these recovery codes — they are shown only once.
+          </p>
+          <p class="text-xs text-zinc-500">
+            Each code substitutes for a TOTP code at login (single-use). Store them somewhere safe.
+          </p>
+          <ul class="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-sm text-cyan-400 select-all">
+            <li v-for="c in freshRecoveryCodes" :key="c">{{ c }}</li>
+          </ul>
+          <div class="flex gap-2 pt-2">
+            <button
+              @click="downloadRecoveryCodes"
+              class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-500"
+            >download .txt</button>
+            <button
+              @click="dismissRecoveryCodes"
+              class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-500"
+            >I have saved them</button>
+          </div>
+        </div>
 
         <p v-if="totpMessage" class="text-xs"
           :class="totpMessage.includes('enabled') || totpMessage.includes('disabled') ? 'text-cyan-400' : 'text-red-400'"
@@ -407,6 +498,19 @@ async function deleteAccount() {
           class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50"
         >{{ revokingAll ? '...' : 'sign out everywhere' }}</button>
         <p v-if="revokeMessage" class="text-xs text-cyan-400">{{ revokeMessage }}</p>
+      </section>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-2">
+        <h2 class="text-lg text-cyan-400">$ activity</h2>
+        <p class="text-xs text-zinc-500">Recent sensitive actions on your account.</p>
+        <ul v-if="data.auditEvents?.length" class="text-xs space-y-1 max-h-64 overflow-y-auto">
+          <li v-for="e in data.auditEvents" :key="e.id" class="flex gap-2">
+            <span class="text-zinc-500 w-40 shrink-0">{{ new Date(e.at).toLocaleString() }}</span>
+            <span class="text-cyan-400">{{ auditLabel(e.kind) }}</span>
+            <span v-if="e.detail" class="text-zinc-500">— {{ e.detail }}</span>
+          </li>
+        </ul>
+        <p v-else class="text-xs text-zinc-500 italic">No activity yet.</p>
       </section>
 
       <section>

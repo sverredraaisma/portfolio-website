@@ -111,20 +111,19 @@ async function resend() {
     <!-- Step 2: TOTP. Only shown when the server hands back a challenge. -->
     <form v-else @submit.prevent="submitTotp" class="space-y-3">
       <p class="text-xs text-zinc-500">
-        2FA enabled — enter the 6-digit code from your authenticator app.
+        2FA enabled — enter the 6-digit code from your authenticator app,
+        or a recovery code (XXXXX-XXXXX) if you've lost your device.
       </p>
       <input
         v-model="totpCode"
-        inputmode="numeric"
-        maxlength="6"
         autocomplete="one-time-code"
         autofocus
-        placeholder="123456"
+        placeholder="123456 or recovery code"
         class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-center font-mono tracking-widest"
       />
       <div class="flex gap-2">
         <button
-          :disabled="loading || totpCode.length < 6"
+          :disabled="loading || !totpCode.trim()"
           class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50"
         >{{ loading ? '...' : 'verify' }}</button>
         <button
@@ -133,6 +132,10 @@ async function resend() {
           class="px-3 text-sm text-zinc-500 hover:text-zinc-300"
         >cancel</button>
       </div>
+      <p class="text-xs text-zinc-500">
+        Lost both? <NuxtLink to="/forgot-password" class="hover:text-cyan-400 underline">Reset your password</NuxtLink> —
+        the email link clears 2FA so you can re-enrol from /account.
+      </p>
     </form>
 
     <p v-if="error" class="text-red-400 text-sm mt-3">{{ error }}</p>
