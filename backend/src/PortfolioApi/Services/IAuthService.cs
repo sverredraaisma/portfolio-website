@@ -23,6 +23,17 @@ public interface IAuthService
     /// Revokes every active refresh token for the user — "sign out everywhere".
     Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    /// Step 1 of email change: validates the new address (uniqueness, format)
+    /// and sends a confirmation link to it. The current address is unchanged
+    /// until the link is clicked.
+    Task RequestEmailChangeAsync(Guid userId, string newEmail, CancellationToken cancellationToken = default);
+
+    /// Step 2 of email change: validates the token, performs the swap,
+    /// re-marks the account as verified (the token proves control of the
+    /// new address), and revokes every active session.
+    /// Returns true on success, false if the token is invalid/expired/wrong-purpose.
+    Task<bool> ConfirmEmailChangeAsync(string jwtToken, CancellationToken cancellationToken = default);
+
     /// Issues a refresh token. Returns the raw token (returned to the client once)
     /// and the persisted record (only the SHA-256 of the token is stored).
     Task<(string token, RefreshToken stored)> IssueRefreshTokenAsync(Guid userId, CancellationToken cancellationToken = default);

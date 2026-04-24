@@ -14,4 +14,5 @@ public sealed class EmailOptions
     public string? SmtpPassword { get; set; }
     public string VerifyUrlBase { get; set; } = "http://localhost:3000/verify";
     public string ResetUrlBase { get; set; } = "http://localhost:3000/reset-password";
+    public string EmailChangeUrlBase { get; set; } = "http://localhost:3000/confirm-email-change";
 }

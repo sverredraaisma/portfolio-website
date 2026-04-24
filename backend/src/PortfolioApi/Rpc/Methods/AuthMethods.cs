@@ -51,6 +51,16 @@ public sealed record ChangePasswordParams
     public required string NewClientHash { get; init; }
 }
 
+public sealed record RequestEmailChangeParams
+{
+    public required string NewEmail { get; init; }
+}
+
+public sealed record ConfirmEmailChangeParams
+{
+    public required string Token { get; init; }
+}
+
 public sealed record ResetPasswordParams
 {
     public required string Token { get; init; }
@@ -154,6 +164,20 @@ public class AuthMethods
         var userId = ctx.RequireUserId();
         await _auth.RevokeAllSessionsAsync(userId, ctx.CancellationToken);
         return new OkResult();
+    }
+
+    public async Task<OkResult> RequestEmailChange(RequestEmailChangeParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        await _auth.RequestEmailChangeAsync(userId, p.NewEmail, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    public async Task<VerifyResult> ConfirmEmailChange(ConfirmEmailChangeParams p, RpcContext ctx)
+    {
+        // Reuses the VerifyResult shape — same boolean meaning.
+        var ok = await _auth.ConfirmEmailChangeAsync(p.Token, ctx.CancellationToken);
+        return new VerifyResult(ok);
     }
 
     public async Task<OkResult> ResetPassword(ResetPasswordParams p, RpcContext ctx)

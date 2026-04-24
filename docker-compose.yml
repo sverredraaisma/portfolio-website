@@ -42,6 +42,7 @@ services:
       # PUBLIC_ORIGIN in .env for production deployments.
       Email__VerifyUrlBase: ${PUBLIC_ORIGIN:-http://localhost}/verify
       Email__ResetUrlBase: ${PUBLIC_ORIGIN:-http://localhost}/reset-password
+      Email__EmailChangeUrlBase: ${PUBLIC_ORIGIN:-http://localhost}/confirm-email-change
       # CORS is now a no-op (browser always hits the same origin via nginx),
       # but the policy still applies if someone connects directly to :8080.
       Cors__FrontendOrigin: ${PUBLIC_ORIGIN:-http://localhost}

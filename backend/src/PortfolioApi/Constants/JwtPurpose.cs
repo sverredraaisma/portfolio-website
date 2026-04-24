@@ -8,4 +8,7 @@ public static class JwtPurpose
     public const string Access = "access";
     public const string EmailVerify = "email-verify";
     public const string PasswordReset = "password-reset";
+    /// Embedded in tokens minted by auth.requestEmailChange. The token's "sub"
+    /// is the userId; the desired new address travels as the "email" claim.
+    public const string EmailChange = "email-change";
 }

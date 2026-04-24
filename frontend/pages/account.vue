@@ -40,6 +40,11 @@ const pwdMessage = ref('')
 const revokingAll = ref(false)
 const revokeMessage = ref('')
 
+// Email-change panel state
+const newEmail = ref('')
+const requestingEmail = ref(false)
+const emailMessage = ref('')
+
 async function loadExport() {
   loading.value = true
   error.value = ''
@@ -103,6 +108,24 @@ async function changePassword() {
   }
 }
 
+async function requestEmailChange() {
+  emailMessage.value = ''
+  if (!newEmail.value || !newEmail.value.includes('@')) {
+    emailMessage.value = 'A valid email address is required.'
+    return
+  }
+  requestingEmail.value = true
+  try {
+    await rpc.call<void>('auth.requestEmailChange', { newEmail: newEmail.value })
+    emailMessage.value = `Confirmation link sent to ${newEmail.value}. Click it to apply the change.`
+    newEmail.value = ''
+  } catch (e) {
+    emailMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    requestingEmail.value = false
+  }
+}
+
 async function revokeAllSessions() {
   revokeMessage.value = ''
   revokingAll.value = true
@@ -161,6 +184,31 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ change email</h2>
+        <p class="text-xs text-zinc-500">
+          Current address: <span class="text-cyan-400">{{ data.email }}</span>.
+          We'll send a confirmation link to the new address; the change applies only when you click it.
+        </p>
+        <div class="flex gap-2">
+          <input
+            v-model="newEmail"
+            type="email"
+            placeholder="new email"
+            autocomplete="email"
+            class="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm"
+          />
+          <button
+            :disabled="requestingEmail || !newEmail"
+            @click="requestEmailChange"
+            class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+          >{{ requestingEmail ? '...' : 'send link' }}</button>
+        </div>
+        <p v-if="emailMessage" class="text-xs" :class="emailMessage.startsWith('Confirmation link sent') ? 'text-cyan-400' : 'text-red-400'">
+          {{ emailMessage }}
+        </p>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ change password</h2>

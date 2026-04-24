@@ -57,6 +57,8 @@ public class RpcRouter
         Register("auth.resendVerification", RpcHandlers.Typed<ResendVerificationParams, OkResult>(auth.ResendVerification));
         Register("auth.changePassword", RpcHandlers.Typed<ChangePasswordParams, OkResult>(auth.ChangePassword));
         Register("auth.revokeAllSessions", RpcHandlers.Typed<OkResult>(auth.RevokeAllSessions));
+        Register("auth.requestEmailChange", RpcHandlers.Typed<RequestEmailChangeParams, OkResult>(auth.RequestEmailChange));
+        Register("auth.confirmEmailChange", RpcHandlers.Typed<ConfirmEmailChangeParams, VerifyResult>(auth.ConfirmEmailChange));
         Register("auth.me", RpcHandlers.Typed<UserDto>(auth.Me));
 
         // Posts
@@ -70,6 +72,7 @@ public class RpcRouter
         // Comments
         Register("comments.list", RpcHandlers.Typed<ListCommentsParams, PaginatedResult<CommentDto>>(comments.List));
         Register("comments.create", RpcHandlers.Typed<CreateCommentParams, CommentDto>(comments.Create));
+        Register("comments.update", RpcHandlers.Typed<UpdateCommentParams, CommentDto>(comments.Update));
         Register("comments.delete", RpcHandlers.Typed<DeleteCommentParams, OkResult>(comments.Delete));
 
         // Signing (Falcon-512 PQC)

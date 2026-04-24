@@ -137,6 +137,62 @@ public class AuthService : IAuthService
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
     }
 
+    public async Task RequestEmailChangeAsync(Guid userId, string newEmail, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(newEmail) || !newEmail.Contains('@'))
+            throw new InvalidOperationException("A valid email address is required");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new AuthFailedException("Unknown user");
+
+        // No-op if the address is already on this account.
+        if (string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("That is already the address on this account");
+
+        // Block obvious clashes early. The unique index on Users.Email is the
+        // ultimate authority — but we don't want to send a confirmation link
+        // that we know will never be applicable. Generic message: the existing
+        // account holder shouldn't learn that their address is in use here.
+        if (await _db.Users.AnyAsync(u => u.Email == newEmail, cancellationToken))
+            throw new InvalidOperationException("Email change could not be requested. Try a different address.");
+
+        var token = _jwt.CreateEmailChangeToken(userId, newEmail);
+        await _email.SendEmailChangeAsync(newEmail, token);
+    }
+
+    public async Task<bool> ConfirmEmailChangeAsync(string jwtToken, CancellationToken cancellationToken = default)
+    {
+        var principal = _jwt.Validate(jwtToken, expectedPurpose: JwtPurpose.EmailChange);
+        if (principal is null) return false;
+
+        var sub = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        var newEmail = principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email)?.Value;
+        if (!Guid.TryParse(sub, out var userId) || string.IsNullOrWhiteSpace(newEmail)) return false;
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null) return false;
+
+        // Re-check uniqueness at confirm time — somebody else may have grabbed
+        // the address between request and click.
+        if (await _db.Users.AnyAsync(u => u.Email == newEmail && u.Id != userId, cancellationToken))
+            return false;
+
+        user.Email = newEmail;
+        // Token possession proves the user controls the new address; flip the
+        // verified-at to now so the new address is treated as confirmed.
+        user.EmailVerifiedAt = DateTime.UtcNow;
+
+        // Email change is a sensitive credential update — revoke every active
+        // session, same as a password change, so any attacker hopping in via
+        // a stolen refresh token gets evicted.
+        await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task ResendVerificationAsync(string email, CancellationToken cancellationToken = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);

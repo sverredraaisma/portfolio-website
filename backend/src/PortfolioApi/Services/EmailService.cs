@@ -39,6 +39,18 @@ public class EmailService : IEmailService
         return SendAsync(toEmail, "Reset your password", html);
     }
 
+    public Task SendEmailChangeAsync(string toEmail, string jwtToken)
+    {
+        var link = $"{_opt.EmailChangeUrlBase}?token={Uri.EscapeDataString(jwtToken)}";
+        var html = $"""
+            <p>Someone — hopefully you — asked to change the email address on an account to this one.</p>
+            <p>Click the link below to confirm the change. The link is valid for a short time.</p>
+            <p><a href="{link}">Confirm email change</a></p>
+            <p>If you didn't request this, ignore the message. The account's email address is unchanged until the link is clicked.</p>
+            """;
+        return SendAsync(toEmail, "Confirm your new email", html);
+    }
+
     private async Task SendAsync(string toEmail, string subject, string html)
     {
         if (string.IsNullOrWhiteSpace(_opt.From))
