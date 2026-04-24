@@ -40,9 +40,9 @@ async function loadMore() {
 
 <template>
   <section class="max-w-3xl mx-auto px-6 py-10">
-    <h1 class="text-2xl text-green-400 mb-6">$ ls posts/</h1>
+    <h1 class="text-2xl text-cyan-400 mb-6">$ ls posts/</h1>
     <ul class="space-y-3">
-      <li v-for="p in posts" :key="p.id" class="border border-zinc-800 rounded p-4 hover:border-green-700 transition">
+      <li v-for="p in posts" :key="p.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-4 hover:border-cyan-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
           <div class="text-lg">{{ p.title }}</div>
           <div class="text-xs text-zinc-500">{{ formatTime(p.createdAt) }} · {{ p.author }}</div>
@@ -55,7 +55,7 @@ async function loadMore() {
       <button
         :disabled="loadingMore"
         @click="loadMore"
-        class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm disabled:opacity-50"
+        class="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-sm disabled:opacity-50"
       >
         {{ loadingMore ? '...' : 'load more' }}
       </button>

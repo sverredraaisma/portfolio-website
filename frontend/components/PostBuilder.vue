@@ -38,13 +38,13 @@ function move(id: string, dir: -1 | 1) {
 
 <template>
   <div class="space-y-3">
-    <div v-for="b in modelValue.blocks" :key="b.id" class="border border-zinc-800 rounded p-3">
+    <div v-for="b in modelValue.blocks" :key="b.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-3">
       <div class="flex justify-between items-center mb-2">
         <span class="text-xs text-zinc-500 uppercase">{{ b.type }}</span>
         <div class="flex gap-1 text-xs">
           <button class="px-2 py-1 bg-zinc-800 rounded" @click="move(b.id, -1)">↑</button>
           <button class="px-2 py-1 bg-zinc-800 rounded" @click="move(b.id, 1)">↓</button>
-          <button class="px-2 py-1 bg-red-900 rounded" @click="remove(b.id)">✕</button>
+          <button class="px-2 py-1 bg-red-200 dark:bg-red-900 rounded" @click="remove(b.id)">✕</button>
         </div>
       </div>
       <component
@@ -55,9 +55,9 @@ function move(id: string, dir: -1 | 1) {
     </div>
 
     <div class="flex gap-2 text-sm">
-      <button class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded" @click="add('header')">+ header</button>
-      <button class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded" @click="add('text')">+ text</button>
-      <button class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded" @click="add('image')">+ image</button>
+      <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('header')">+ header</button>
+      <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('text')">+ text</button>
+      <button class="px-3 py-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded" @click="add('image')">+ image</button>
     </div>
   </div>
 </template>

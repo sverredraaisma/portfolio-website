@@ -94,12 +94,12 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
 </script>
 
 <template>
-  <div class="bg-black border border-green-900 rounded p-4 text-sm leading-6 text-green-300">
+  <div class="bg-black border border-cyan-900 rounded p-4 text-sm leading-6 text-cyan-300">
     <div ref="scroller" class="space-y-1 max-h-80 overflow-y-auto">
       <div v-for="c in comments" :key="c.id" class="group flex items-start">
         <div class="flex-1">
-          <span class="text-green-600">[{{ formatTime(c.createdAt) }}]</span>
-          <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-green-600'">
+          <span class="text-cyan-600">[{{ formatTime(c.createdAt) }}]</span>
+          <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-cyan-600'">
             {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
           </span>
           <span class="text-zinc-500"> &gt; </span>
@@ -116,14 +116,14 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
     </div>
 
     <form @submit.prevent="send" class="mt-3 flex items-center">
-      <span class="mr-2" :class="isAdmin ? 'text-red-400' : 'text-green-500'">
+      <span class="mr-2" :class="isAdmin ? 'text-red-400' : 'text-cyan-500'">
         <span v-if="isAdmin" class="text-red-500">[sudo]&nbsp;</span>{{ promptUser }}@{{ promptHost }}:~{{ promptTail }}
       </span>
       <input
         v-model="draft"
         :disabled="sending"
         :placeholder="auth.isAuthenticated ? 'type a comment, press enter' : 'log in to comment'"
-        class="flex-1 bg-transparent outline-none border-none placeholder-green-800"
+        class="flex-1 bg-transparent outline-none border-none placeholder-cyan-800"
       />
       <span class="blink ml-1">█</span>
     </form>

@@ -21,8 +21,8 @@ async function submit() {
 
 <template>
   <section class="max-w-sm mx-auto px-6 py-16">
-    <h1 class="text-xl text-green-400 mb-6">$ forgot password</h1>
-    <div v-if="done" class="text-green-300 text-sm leading-relaxed">
+    <h1 class="text-xl text-cyan-400 mb-6">$ forgot password</h1>
+    <div v-if="done" class="text-cyan-300 text-sm leading-relaxed">
       If that email belongs to an account, a reset link has been sent.
       Check your inbox (and spam folder).
     </div>
@@ -33,11 +33,11 @@ async function submit() {
         required
         placeholder="email"
         autocomplete="email"
-        class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2"
+        class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2"
       />
       <button
         :disabled="loading"
-        class="w-full bg-green-600 hover:bg-green-500 text-black font-bold rounded py-2 disabled:opacity-50"
+        class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50"
       >
         {{ loading ? '...' : 'send reset link' }}
       </button>

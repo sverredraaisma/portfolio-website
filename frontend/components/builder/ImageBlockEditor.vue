@@ -54,12 +54,12 @@ const previewSrc = computed(() =>
     <input type="file" accept="image/*" @change="onPick" class="text-sm" />
     <p v-if="uploading" class="text-xs text-zinc-500">uploading & converting to webp...</p>
     <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
-    <img v-if="block.data.src" :src="previewSrc" class="max-h-48 rounded border border-zinc-800" />
+    <img v-if="block.data.src" :src="previewSrc" class="max-h-48 rounded border border-zinc-300 dark:border-zinc-800" />
     <input
       :value="block.data.alt"
       @input="setAlt(($event.target as HTMLInputElement).value)"
       placeholder="alt text"
-      class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm"
+      class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm"
     />
   </div>
 </template>

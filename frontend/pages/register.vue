@@ -26,15 +26,15 @@ async function submit() {
 
 <template>
   <section class="max-w-sm mx-auto px-6 py-16">
-    <h1 class="text-xl text-green-400 mb-6">$ register</h1>
-    <div v-if="done" class="text-green-300">
+    <h1 class="text-xl text-cyan-400 mb-6">$ register</h1>
+    <div v-if="done" class="text-cyan-300">
       Check your inbox for a verification link.
     </div>
     <form v-else @submit.prevent="submit" class="space-y-3">
-      <input v-model="username" placeholder="username" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" autocomplete="username" />
-      <input v-model="email" type="email" placeholder="email" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" autocomplete="email" />
-      <input v-model="password" type="password" placeholder="password" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" autocomplete="new-password" />
-      <button :disabled="loading" class="w-full bg-green-600 hover:bg-green-500 text-black font-bold rounded py-2 disabled:opacity-50">
+      <input v-model="username" placeholder="username" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="username" />
+      <input v-model="email" type="email" placeholder="email" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="email" />
+      <input v-model="password" type="password" placeholder="password" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" autocomplete="new-password" />
+      <button :disabled="loading" class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded py-2 disabled:opacity-50">
         {{ loading ? '...' : 'register' }}
       </button>
     </form>

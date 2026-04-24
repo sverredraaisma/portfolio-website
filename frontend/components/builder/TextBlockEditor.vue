@@ -12,6 +12,6 @@ function set(v: string) { emit('update', { ...props.block, data: { markdown: v }
     @input="set(($event.target as HTMLTextAreaElement).value)"
     rows="5"
     placeholder="write something..."
-    class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm leading-relaxed"
+    class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm leading-relaxed"
   />
 </template>

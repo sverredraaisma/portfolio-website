@@ -34,19 +34,19 @@ async function save(published: boolean) {
 
 <template>
   <section class="max-w-3xl mx-auto px-6 py-10">
-    <h1 class="text-2xl text-green-400 mb-6">$ new post</h1>
+    <h1 class="text-2xl text-cyan-400 mb-6">$ new post</h1>
     <div class="space-y-3 mb-6">
-      <input v-model="title" placeholder="title" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
-      <input v-model="slug" placeholder="slug (optional)" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
+      <input v-model="title" placeholder="title" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
+      <input v-model="slug" placeholder="slug (optional)" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
     </div>
 
     <PostBuilder v-model="doc" />
 
     <div class="mt-6 flex items-center gap-3">
-      <button :disabled="saving" @click="save(false)" class="bg-zinc-700 hover:bg-zinc-600 text-green-300 rounded px-4 py-2 disabled:opacity-50">
+      <button :disabled="saving" @click="save(false)" class="bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-cyan-300 rounded px-4 py-2 disabled:opacity-50">
         {{ saving ? '...' : 'save draft' }}
       </button>
-      <button :disabled="saving" @click="save(true)" class="bg-green-600 hover:bg-green-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50">
+      <button :disabled="saving" @click="save(true)" class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50">
         {{ saving ? '...' : 'publish' }}
       </button>
       <span v-if="error" class="text-red-400 text-sm">{{ error }}</span>

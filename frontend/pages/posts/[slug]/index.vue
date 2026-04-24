@@ -38,7 +38,7 @@ useSeoMeta({
   <article v-if="post" class="max-w-3xl mx-auto px-6 py-10">
     <header class="mb-8 flex items-start justify-between gap-4">
       <div>
-        <h1 class="text-3xl text-green-400">{{ post.title }}</h1>
+        <h1 class="text-3xl text-cyan-400">{{ post.title }}</h1>
         <div class="text-xs text-zinc-500 mt-1">
           {{ formatTime(post.createdAt) }} · {{ post.author }}
         </div>
@@ -46,7 +46,7 @@ useSeoMeta({
       <NuxtLink
         v-if="auth.user?.isAdmin"
         :to="`/posts/${post.slug}/edit`"
-        class="text-xs px-2 py-1 rounded border border-zinc-700 hover:border-green-700 text-zinc-400 hover:text-green-400"
+        class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-700 text-zinc-400 hover:text-cyan-400"
       >edit</NuxtLink>
     </header>
 

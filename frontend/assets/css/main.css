@@ -2,13 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Retro CRT vibes for the landing page. */
+/* Retro CRT vibes for the landing page. Cyan-tinted in dark mode, paper-like in light. */
 @layer utilities {
   .crt {
     position: relative;
-    background: radial-gradient(ellipse at center, #0b0f0a 0%, #000 80%);
-    color: #b6ffb6;
-    text-shadow: 0 0 4px rgba(0, 255, 120, 0.45);
+    background: radial-gradient(ellipse at center, #f4fbfd 0%, #dff2f6 80%);
+    color: #0c4a6e;
+    text-shadow: 0 0 2px rgba(8, 145, 178, 0.25);
+  }
+  .dark .crt {
+    background: radial-gradient(ellipse at center, #0a1216 0%, #000 80%);
+    color: #a5f3fc;
+    text-shadow: 0 0 4px rgba(34, 211, 238, 0.45);
   }
   .crt::before {
     content: '';
@@ -17,16 +22,27 @@
       to bottom,
       rgba(0,0,0,0) 0px,
       rgba(0,0,0,0) 2px,
-      rgba(0,0,0,0.18) 3px
+      rgba(0,0,0,0.10) 3px
     );
     pointer-events: none;
     mix-blend-mode: multiply;
   }
+  .dark .crt::before {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.18) 3px
+    );
+  }
   .crt::after {
     content: '';
     position: absolute; inset: 0;
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.15) 100%);
     pointer-events: none;
+  }
+  .dark .crt::after {
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
   }
   .blink {
     animation: blink 1.1s steps(1) infinite;

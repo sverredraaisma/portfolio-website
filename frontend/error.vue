@@ -17,9 +17,9 @@ function home() {
 </script>
 
 <template>
-  <section class="min-h-screen flex items-center justify-center px-6 bg-black text-green-300">
+  <section class="min-h-screen flex items-center justify-center px-6 bg-black text-cyan-300">
     <div class="max-w-lg w-full">
-      <pre class="text-xs leading-5 text-green-600">
+      <pre class="text-xs leading-5 text-cyan-600">
 $ cat /var/log/error.log
 [ERR {{ code }}] {{ message }}
 [hint] check the URL or return to the home directory
@@ -27,10 +27,10 @@ $ cat /var/log/error.log
       <div class="mt-4 flex items-center gap-3 text-sm">
         <button
           @click="home"
-          class="px-3 py-1 bg-green-600 hover:bg-green-500 text-black font-bold rounded"
+          class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded"
         >cd ~</button>
         <span class="text-zinc-500">or</span>
-        <NuxtLink to="/posts" class="hover:text-green-400">$ ls posts/</NuxtLink>
+        <NuxtLink to="/posts" class="hover:text-cyan-400">$ ls posts/</NuxtLink>
       </div>
     </div>
   </section>

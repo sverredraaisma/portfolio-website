@@ -79,16 +79,16 @@ async function remove() {
 
 <template>
   <section class="max-w-3xl mx-auto px-6 py-10">
-    <h1 class="text-2xl text-green-400 mb-6">$ edit post</h1>
+    <h1 class="text-2xl text-cyan-400 mb-6">$ edit post</h1>
 
     <p v-if="loading" class="text-zinc-500">loading...</p>
 
     <template v-else-if="id">
       <div class="space-y-3 mb-6">
-        <input v-model="title" placeholder="title" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
-        <input v-model="slug" placeholder="slug" class="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2" />
+        <input v-model="title" placeholder="title" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
+        <input v-model="slug" placeholder="slug" class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2" />
         <div class="text-xs text-zinc-500">
-          status: <span :class="published ? 'text-green-400' : 'text-yellow-400'">{{ published ? 'published' : 'draft' }}</span>
+          status: <span :class="published ? 'text-cyan-400' : 'text-yellow-400'">{{ published ? 'published' : 'draft' }}</span>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ async function remove() {
         <button
           :disabled="saving || deleting"
           @click="save()"
-          class="bg-zinc-700 hover:bg-zinc-600 text-green-300 rounded px-4 py-2 disabled:opacity-50"
+          class="bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-cyan-300 rounded px-4 py-2 disabled:opacity-50"
         >
           {{ saving ? '...' : 'save' }}
         </button>
@@ -107,7 +107,7 @@ async function remove() {
           v-if="!published"
           :disabled="saving || deleting"
           @click="save(true)"
-          class="bg-green-600 hover:bg-green-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50"
+          class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 disabled:opacity-50"
         >
           publish
         </button>

@@ -13,13 +13,13 @@ function setLevel(v: number) {
 <template>
   <div class="flex gap-2">
     <select :value="block.data.level" @change="setLevel(Number(($event.target as HTMLSelectElement).value))"
-      class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm">
+      class="bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm">
       <option :value="1">H1</option>
       <option :value="2">H2</option>
       <option :value="3">H3</option>
     </select>
     <input :value="block.data.text" @input="setText(($event.target as HTMLInputElement).value)"
       placeholder="header text"
-      class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm" />
+      class="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm" />
   </div>
 </template>
