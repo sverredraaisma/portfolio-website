@@ -11,11 +11,11 @@ namespace PortfolioApi.Tests.Rpc;
 public class AccountMethodsTests
 {
     [Theory]
-    [InlineData("anonymise", true)]
-    [InlineData("anonymize", true)]   // American spelling
-    [InlineData("ANONYMISE", true)]   // case-insensitive
-    [InlineData("",          true)]   // empty defaults to anonymise (less destructive)
-    public async Task Delete_with_anonymise_aliases_passes_through_as_anonymise(string raw, bool _ignored)
+    [InlineData("anonymise")]
+    [InlineData("anonymize")]   // American spelling
+    [InlineData("ANONYMISE")]   // case-insensitive
+    [InlineData("")]            // empty defaults to anonymise (less destructive)
+    public async Task Delete_with_anonymise_aliases_passes_through_as_anonymise(string raw)
     {
         var spy = new SpyAccountService();
         var sut = new AccountMethods(spy);
