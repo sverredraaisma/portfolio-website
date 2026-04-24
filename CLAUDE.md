@@ -50,7 +50,16 @@ The backend does not need to know about new block types unless they have server-
 Uploaded images go through `ImageService.ConvertToWebpAsync` and are stored under `backend/media/`. The original is discarded. Use `Image.Load` from `SixLabors.ImageSharp` and save with `WebpEncoder`. Default quality 80.
 
 ### Comments
-Comments are flat (no threading), ordered by creation time. The frontend renders them as a terminal scrollback; the input is the prompt line. Keep the API minimal: `comments.list`, `comments.create`, `comments.delete` (own only).
+Comments are flat (no threading), ordered by creation time. The frontend renders them as a terminal scrollback; the input is the prompt line. Keep the API minimal: `comments.list`, `comments.create`, `comments.delete` (own comments, or any if admin).
+
+### Signing
+The site holds a Falcon-512 (NIST PQC) keypair generated on first boot at `backend/keys/`. The admin can sign arbitrary statements at `/sign`; visitors verify them at `/verify-statement`. RPCs:
+
+- `signing.publicKey` (public) — algorithm, base64 public key, SHA-256 fingerprint.
+- `signing.sign` (admin) — signs a statement, returns the full envelope.
+- `signing.verify` (public) — verifies `{ statement, signatureBase64, publicKeyBase64? }`. When `publicKeyBase64` is omitted the site's current key is used.
+
+On-disk format is PKCS#8 / SubjectPublicKeyInfo (via `Pqc*Factory`) so files survive BouncyCastle version bumps. Wire format is the raw 896-byte Falcon-512 public key. **Never** read or copy `keys/falcon.priv` outside the backend container.
 
 ## Running locally
 
