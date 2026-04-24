@@ -14,6 +14,7 @@ namespace PortfolioApi.Tests.E2e;
 /// Drives the full /rpc pipeline (router + auth + Argon2 hashing + DB writes
 /// + security headers) over a real HttpClient. Each test starts from a
 /// freshly-created DB so order doesn't matter.
+[Collection("e2e")]
 public class RpcRoundTripE2eTests : IClassFixture<AppFactory>, IAsyncLifetime
 {
     private readonly AppFactory _app;

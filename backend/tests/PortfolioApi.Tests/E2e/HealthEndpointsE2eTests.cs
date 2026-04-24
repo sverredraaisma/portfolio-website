@@ -5,6 +5,7 @@ using PortfolioApi.Tests.Infrastructure;
 
 namespace PortfolioApi.Tests.E2e;
 
+[Collection("e2e")]
 public class HealthEndpointsE2eTests : IClassFixture<AppFactory>
 {
     private readonly AppFactory _app;
