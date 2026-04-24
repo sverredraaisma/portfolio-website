@@ -1,15 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-// Tested module reaches into Nuxt's `useState`. We provide a tiny shim with
-// the same shape backed by a plain ref — enough for the queue/dismiss logic.
-import * as vue from 'vue'
-
-;(globalThis as any).useState = (_key: string, init: () => any) => vue.ref(init())
+import { resetUseState } from '~/tests/useStateShim'
 
 const { useToast } = await import('~/composables/useToast')
 
 describe('useToast', () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetUseState('toasts')
+  })
   afterEach(() => vi.useRealTimers())
 
   it('adds toasts to the queue under the right kind', () => {
