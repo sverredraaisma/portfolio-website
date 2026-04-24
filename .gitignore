@@ -23,6 +23,12 @@ appsettings.Development.local.json
 backend/media/
 backend/src/PortfolioApi/media/
 
+# Falcon-512 signing keypair — generated on first boot, never committed.
+# Production stores these in a docker volume; dev gets a fresh keypair on
+# first `dotnet run`. Tests stash their keys in a temp dir.
+backend/keys/
+backend/src/PortfolioApi/keys/
+
 # IDE
 .idea/
 .vscode/
