@@ -19,36 +19,50 @@ public class EmailService : IEmailService
     public Task SendVerificationAsync(string toEmail, string jwtToken)
     {
         var link = $"{_opt.VerifyUrlBase}?token={Uri.EscapeDataString(jwtToken)}";
+        var text =
+            "Welcome! Please verify your email by clicking the link below:\n\n" +
+            $"  {link}\n\n" +
+            "If you didn't create an account, you can ignore this message.\n";
         var html = $"""
             <p>Welcome! Please verify your email by clicking the link below:</p>
             <p><a href="{link}">Verify email</a></p>
             <p>If you didn't create an account, you can ignore this message.</p>
             """;
-        return SendAsync(toEmail, "Verify your email", html);
+        return SendAsync(toEmail, "Verify your email", text, html);
     }
 
     public Task SendPasswordResetAsync(string toEmail, string jwtToken)
     {
         var link = $"{_opt.ResetUrlBase}?token={Uri.EscapeDataString(jwtToken)}";
+        var text =
+            "We received a request to reset the password on this account.\n\n" +
+            "Click the link below to choose a new password. The link is valid for a short time.\n\n" +
+            $"  {link}\n\n" +
+            "If you didn't request this, you can ignore this message — your account is unchanged.\n";
         var html = $"""
             <p>We received a request to reset the password on this account.</p>
             <p>Click the link below to choose a new password. The link is valid for a short time.</p>
             <p><a href="{link}">Reset password</a></p>
             <p>If you didn't request this, you can ignore this message — your account is unchanged.</p>
             """;
-        return SendAsync(toEmail, "Reset your password", html);
+        return SendAsync(toEmail, "Reset your password", text, html);
     }
 
     public Task SendEmailChangeAsync(string toEmail, string jwtToken)
     {
         var link = $"{_opt.EmailChangeUrlBase}?token={Uri.EscapeDataString(jwtToken)}";
+        var text =
+            "Someone — hopefully you — asked to change the email address on an account to this one.\n\n" +
+            "Click the link below to confirm the change. The link is valid for a short time.\n\n" +
+            $"  {link}\n\n" +
+            "If you didn't request this, ignore the message. The account's email address is unchanged until the link is clicked.\n";
         var html = $"""
             <p>Someone — hopefully you — asked to change the email address on an account to this one.</p>
             <p>Click the link below to confirm the change. The link is valid for a short time.</p>
             <p><a href="{link}">Confirm email change</a></p>
             <p>If you didn't request this, ignore the message. The account's email address is unchanged until the link is clicked.</p>
             """;
-        return SendAsync(toEmail, "Confirm your new email", html);
+        return SendAsync(toEmail, "Confirm your new email", text, html);
     }
 
     public Task SendSecurityAlertAsync(string toEmail, string actionLabel, string? extraNote = null)
@@ -63,10 +77,16 @@ public class EmailService : IEmailService
             <p>If this was you, no action is needed.</p>
             <p>If it wasn't you, reset your password immediately and review the activity log on your account page.</p>
             """;
+        var text =
+            $"The following action just happened on your account: {actionLabel}.\n" +
+            $"When: {when}\n" +
+            (extraNote is null ? "" : $"\n{extraNote}\n") +
+            "\nIf this was you, no action is needed.\n" +
+            "If it wasn't you, reset your password immediately and review the activity log on your account page.\n";
         // Subject is plain text (not HTML), but newlines would corrupt the
         // SMTP header — clamp to the first line.
         var subject = "Security alert: " + actionLabel.Replace('\n', ' ').Replace('\r', ' ');
-        return SendAsync(toEmail, subject, html);
+        return SendAsync(toEmail, subject, text, html);
     }
 
     public Task SendCommentNotificationAsync(
@@ -95,8 +115,16 @@ public class EmailService : IEmailService
             <p><a href="{link}">View the comment</a></p>
             <p style="color: #888; font-size: 12px;">You can turn off these notifications on your account page.</p>
             """;
+        // Plain-text alternative. Quoting the body with "> " prefixes matches
+        // the convention of every text-based mail client.
+        var quoted = string.Join("\n", clipped.Split('\n').Select(l => "> " + l));
+        var text =
+            $"{commenterUsername} commented on your post \"{postTitle}\":\n\n" +
+            $"{quoted}\n\n" +
+            $"View the comment: {link}\n\n" +
+            "You can turn off these notifications on your account page.\n";
         var subject = "New comment on " + postTitle.Replace('\n', ' ').Replace('\r', ' ');
-        return SendAsync(toEmail, subject, html);
+        return SendAsync(toEmail, subject, text, html);
     }
 
     // Small inline HTML escape — actionLabel and extraNote are server-supplied
@@ -109,7 +137,7 @@ public class EmailService : IEmailService
         .Replace("\"", "&quot;")
         .Replace("'", "&#39;");
 
-    private async Task SendAsync(string toEmail, string subject, string html)
+    private async Task SendAsync(string toEmail, string subject, string text, string html)
     {
         if (string.IsNullOrWhiteSpace(_opt.From))
             throw new InvalidOperationException("Email:From is not configured");
@@ -118,7 +146,14 @@ public class EmailService : IEmailService
         msg.From.Add(MailboxAddress.Parse(_opt.From));
         msg.To.Add(MailboxAddress.Parse(toEmail));
         msg.Subject = subject;
-        msg.Body = new TextPart("html") { Text = html };
+        // multipart/alternative: text-only readers (mutt, screen readers, some
+        // mobile previews) take the plain part; HTML clients take the second.
+        // Lower spam scores too — HTML-only mail trips a lot of filters.
+        msg.Body = new MultipartAlternative
+        {
+            new TextPart("plain") { Text = text },
+            new TextPart("html") { Text = html }
+        };
 
         if (string.IsNullOrWhiteSpace(_opt.SmtpHost))
         {
