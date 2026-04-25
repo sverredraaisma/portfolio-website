@@ -54,8 +54,15 @@ public class RssEndpointTests : IAsyncLifetime
             var author = new User { Username = "alice", Email = "a@x", PasswordHash = new byte[]{1}, PasswordSalt = new byte[]{1} };
             db.Users.Add(author);
             db.Posts.AddRange(
-                new Post { Title = "Live Post", Slug = "live", AuthorId = author.Id, Published = true,  CreatedAt = DateTime.UtcNow.AddHours(-1) },
-                new Post { Title = "Draft",     Slug = "draft", AuthorId = author.Id, Published = false }
+                new Post
+                {
+                    Title = "Live Post", Slug = "live", AuthorId = author.Id, Published = true,
+                    CreatedAt = DateTime.UtcNow.AddHours(-1),
+                    Blocks = System.Text.Json.JsonDocument.Parse(
+                        "{\"blocks\":[{\"type\":\"header\",\"id\":\"h\",\"data\":{\"text\":\"Hello\",\"level\":1}}," +
+                        "{\"type\":\"text\",\"id\":\"t\",\"data\":{\"markdown\":\"the\\nfirst\\ntext block body\"}}]}")
+                },
+                new Post { Title = "Draft", Slug = "draft", AuthorId = author.Id, Published = false }
             );
             await db.SaveChangesAsync();
         }
@@ -103,5 +110,84 @@ public class RssEndpointTests : IAsyncLifetime
         var response = await _client.GetAsync("/rss.xml");
 
         response.Headers.CacheControl!.MaxAge.Should().Be(TimeSpan.FromHours(1));
+    }
+
+    [Fact]
+    public async Task GET_rss_xml_includes_an_item_description_pulled_from_the_first_text_block()
+    {
+        var response = await _client.GetAsync("/rss.xml");
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        var description = doc.Descendants("item")
+            .First(i => i.Element("title")!.Value == "Live Post")
+            .Element("description")!.Value;
+
+        // Whitespace-collapsed version of the seeded markdown.
+        description.Should().Contain("first text block body");
+        description.Should().NotContain("\n", "newlines should be collapsed for the preview");
+    }
+}
+
+/// Pure-function tests for the description extractor — covered separately
+/// so we don't have to spin up an HTTP host for every edge case.
+public class RssEndpointDescriptionTests
+{
+    private static System.Text.Json.JsonDocument Doc(string raw) => System.Text.Json.JsonDocument.Parse(raw);
+
+    [Fact]
+    public void Returns_first_text_block_markdown()
+    {
+        var d = Doc("{\"blocks\":[{\"type\":\"text\",\"data\":{\"markdown\":\"hello world\"}}]}");
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d).Should().Be("hello world");
+    }
+
+    [Fact]
+    public void Falls_back_to_first_header_when_no_text_block_exists()
+    {
+        var d = Doc("{\"blocks\":[{\"type\":\"header\",\"data\":{\"text\":\"My title\",\"level\":1}}]}");
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d).Should().Be("My title");
+    }
+
+    [Fact]
+    public void Prefers_text_over_header_even_if_the_header_appears_first()
+    {
+        var d = Doc("{\"blocks\":[" +
+                    "{\"type\":\"header\",\"data\":{\"text\":\"Title\",\"level\":1}}," +
+                    "{\"type\":\"text\",\"data\":{\"markdown\":\"the body\"}}]}");
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d).Should().Be("the body");
+    }
+
+    [Fact]
+    public void Collapses_runs_of_whitespace_so_the_preview_is_one_line()
+    {
+        var d = Doc("{\"blocks\":[{\"type\":\"text\",\"data\":{\"markdown\":\"hello\\n\\n   world\"}}]}");
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d).Should().Be("hello world");
+    }
+
+    [Fact]
+    public void Clips_overly_long_markdown_with_an_ellipsis()
+    {
+        var long_ = new string('a', 400);
+        var d = Doc("{\"blocks\":[{\"type\":\"text\",\"data\":{\"markdown\":\"" + long_ + "\"}}]}");
+        var result = PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d);
+        result.Length.Should().Be(280);
+        result.Should().EndWith("…");
+    }
+
+    [Fact]
+    public void Returns_empty_string_when_there_are_no_blocks_at_all()
+    {
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(Doc("{\"blocks\":[]}")).Should().BeEmpty();
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(Doc("{}")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Skips_blocks_with_unknown_or_malformed_shapes()
+    {
+        // image blocks have no markdown/text — skipped without throwing.
+        var d = Doc("{\"blocks\":[" +
+                    "{\"type\":\"image\",\"data\":{\"src\":\"/x.webp\"}}," +
+                    "{\"type\":\"text\",\"data\":{\"markdown\":\"after the image\"}}]}");
+        PortfolioApi.Rpc.RssEndpoint.ExtractDescription(d).Should().Be("after the image");
     }
 }

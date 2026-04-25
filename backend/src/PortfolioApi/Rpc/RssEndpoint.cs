@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Xml;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -31,7 +32,14 @@ public static class RssEndpoint
                 .Where(p => p.Published)
                 .OrderByDescending(p => p.CreatedAt)
                 .Take(MaxItems)
-                .Select(p => new { p.Title, p.Slug, p.CreatedAt, Author = p.Author!.Username })
+                .Select(p => new
+                {
+                    p.Title,
+                    p.Slug,
+                    p.CreatedAt,
+                    Author = p.Author!.Username,
+                    p.Blocks
+                })
                 .ToListAsync(http.RequestAborted);
 
             var xml = new StringBuilder();
@@ -63,6 +71,9 @@ public static class RssEndpoint
                     writer.WriteElementString("guid", url);
                     writer.WriteElementString("pubDate", p.CreatedAt.ToString("R", CultureInfo.InvariantCulture));
                     writer.WriteElementString("author", p.Author);
+                    var description = ExtractDescription(p.Blocks);
+                    if (!string.IsNullOrEmpty(description))
+                        writer.WriteElementString("description", description);
                     writer.WriteEndElement(); // item
                 }
 
@@ -151,5 +162,49 @@ public static class RssEndpoint
         });
 
         return app;
+    }
+
+    /// First text block's markdown, falling back to first header. Whitespace-
+    /// collapsed and clipped at ~280 chars. The frontend uses the same
+    /// rule for its OG description, so the feed preview matches what a link
+    /// share would show. XmlWriter handles XML escaping; we don't pre-escape.
+    private const int DescriptionMaxLen = 280;
+    /// Public so the unit tests can hit it without an InternalsVisibleTo
+    /// shim. The endpoint is the only production caller.
+    public static string ExtractDescription(JsonDocument doc)
+    {
+        if (doc is null) return string.Empty;
+        if (!doc.RootElement.TryGetProperty("blocks", out var blocks) || blocks.ValueKind != JsonValueKind.Array)
+            return string.Empty;
+
+        string? firstHeader = null;
+        foreach (var b in blocks.EnumerateArray())
+        {
+            if (b.ValueKind != JsonValueKind.Object) continue;
+            if (!b.TryGetProperty("type", out var t) || t.ValueKind != JsonValueKind.String) continue;
+            if (!b.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object) continue;
+
+            if (t.GetString() == "text"
+                && data.TryGetProperty("markdown", out var md)
+                && md.ValueKind == JsonValueKind.String)
+            {
+                return Clip(md.GetString() ?? string.Empty);
+            }
+            if (firstHeader is null
+                && t.GetString() == "header"
+                && data.TryGetProperty("text", out var h)
+                && h.ValueKind == JsonValueKind.String)
+            {
+                firstHeader = h.GetString();
+            }
+        }
+        return Clip(firstHeader ?? string.Empty);
+    }
+
+    private static string Clip(string s)
+    {
+        var collapsed = string.Join(' ', s.Split(default(char[]?), StringSplitOptions.RemoveEmptyEntries));
+        if (collapsed.Length <= DescriptionMaxLen) return collapsed;
+        return collapsed[..(DescriptionMaxLen - 1)] + "…";
     }
 }
