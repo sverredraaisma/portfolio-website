@@ -68,6 +68,17 @@ public class AccountService : IAccountService
             .Select(s => new AccountExportLocation(s.Latitude, s.Longitude, s.Label, s.Source, s.UpdatedAt))
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Bookmarks include the post title + slug so the export reads
+        // like a list, not a wall of UUIDs. Cascade-deletes when the
+        // user removes their account, so we don't list them in the
+        // delete summary.
+        var bookmarks = await _db.Bookmarks
+            .AsNoTracking()
+            .Where(b => b.UserId == userId)
+            .OrderByDescending(b => b.CreatedAt)
+            .Select(b => new AccountExportBookmark(b.Id, b.PostId, b.Post!.Title, b.Post!.Slug, b.CreatedAt))
+            .ToListAsync(cancellationToken);
+
         return new AccountExport(
             user.Id,
             user.Username,
@@ -84,7 +95,8 @@ public class AccountService : IAccountService
             comments,
             refreshTokens,
             auditEvents,
-            location);
+            location,
+            bookmarks);
     }
 
     public async Task DeleteAsync(Guid userId, CommentDeletionStrategy commentStrategy, CancellationToken cancellationToken = default)

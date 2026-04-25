@@ -70,7 +70,8 @@ public class AccountMethodsTests
                 Array.Empty<AccountExportComment>(),
                 Array.Empty<AccountExportRefreshToken>(),
                 Array.Empty<AccountExportAuditEvent>(),
-                SharedLocation: null));
+                SharedLocation: null,
+                Bookmarks: Array.Empty<AccountExportBookmark>()));
 
         public Task DeleteAsync(Guid userId, CommentDeletionStrategy commentStrategy, CancellationToken cancellationToken = default)
         {

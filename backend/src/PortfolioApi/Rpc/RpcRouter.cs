@@ -42,7 +42,7 @@ public class RpcRouter
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.Ordinal);
     private readonly ILogger<RpcRouter> _log;
 
-    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, LocationMethods locations, UserMethods users, ILogger<RpcRouter> log)
+    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, LocationMethods locations, UserMethods users, BookmarkMethods bookmarks, ILogger<RpcRouter> log)
     {
         _log = log;
 
@@ -100,6 +100,11 @@ public class RpcRouter
 
         // Public user profile (read-only — no PII beyond what's already public)
         Register("users.getProfile", RpcHandlers.Typed<GetProfileParams, UserProfileDto>(users.GetProfile));
+
+        // Per-user post bookmarks
+        Register("bookmarks.list",         RpcHandlers.Typed<IReadOnlyList<BookmarkDto>>(bookmarks.List));
+        Register("bookmarks.toggle",       RpcHandlers.Typed<ToggleBookmarkParams, BookmarkToggleResult>(bookmarks.Toggle));
+        Register("bookmarks.isBookmarked", RpcHandlers.Typed<ToggleBookmarkParams, BookmarkToggleResult>(bookmarks.IsBookmarked));
 
         // Shared locations (opt-in; rounded coords on the public list)
         Register("location.list",        RpcHandlers.Typed<IReadOnlyList<SharedLocationDto>>(locations.List));

@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Passkey> Passkeys => Set<Passkey>();
     public DbSet<SharedLocation> SharedLocations => Set<SharedLocation>();
+    public DbSet<Bookmark> Bookmarks => Set<Bookmark>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -136,6 +137,22 @@ public class AppDbContext : DbContext
             e.HasOne(s => s.User)
                 .WithMany()
                 .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Bookmark>(e =>
+        {
+            // Idempotent add/remove — composite unique on (UserId, PostId)
+            // means the second add becomes a no-op via DbUpdateException
+            // catch in the RPC method.
+            e.HasIndex(x => new { x.UserId, x.PostId }).IsUnique();
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Post)
+                .WithMany()
+                .HasForeignKey(x => x.PostId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

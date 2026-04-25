@@ -5,6 +5,7 @@ import TerminalComments from '~/components/TerminalComments.vue'
 import { formatTime } from '~/composables/useDate'
 import { readingTimeMinutes } from '~/composables/useReadingTime'
 import { useAuthStore } from '~/stores/auth'
+import { useToast } from '~/composables/useToast'
 
 type PostFull = {
   id: string; title: string; slug: string;
@@ -42,6 +43,38 @@ useSeoMeta({
   ogDescription: () => description(post.value?.blocks?.blocks),
   ogType: 'article'
 })
+
+// ---- Bookmark state -------------------------------------------------------
+// Bookmarking is auth-only — the backend rejects anonymous toggle, so we
+// hide the button rather than render a disabled control. Initial state is
+// fetched once after the post loads; subsequent toggles update locally and
+// reconcile against the response.
+const toast = useToast()
+const isBookmarked = ref(false)
+const bookmarkBusy = ref(false)
+async function refreshBookmarkState() {
+  if (!auth.isAuthenticated || !post.value) return
+  try {
+    const res = await rpc.call<{ isBookmarked: boolean }>('bookmarks.isBookmarked', { postId: post.value.id })
+    isBookmarked.value = res.isBookmarked
+  } catch {
+    // Best-effort — leave the button in its default (unsaved) state.
+  }
+}
+async function toggleBookmark() {
+  if (!post.value || bookmarkBusy.value) return
+  bookmarkBusy.value = true
+  try {
+    const res = await rpc.call<{ isBookmarked: boolean }>('bookmarks.toggle', { postId: post.value.id })
+    isBookmarked.value = res.isBookmarked
+    toast.info(res.isBookmarked ? 'Saved.' : 'Removed from saved.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    bookmarkBusy.value = false
+  }
+}
+watch(() => post.value?.id, refreshBookmarkState, { immediate: true })
 </script>
 
 <template>
@@ -55,11 +88,23 @@ useSeoMeta({
           · ~{{ readMinutes }} min read
         </div>
       </div>
-      <NuxtLink
-        v-if="auth.user?.isAdmin"
-        :to="`/posts/${post.slug}/edit`"
-        class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-700 text-zinc-400 hover:text-cyan-400"
-      >edit</NuxtLink>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="auth.isAuthenticated"
+          :disabled="bookmarkBusy"
+          @click="toggleBookmark"
+          class="text-xs px-2 py-1 rounded border transition disabled:opacity-50"
+          :class="isBookmarked
+            ? 'border-cyan-500 text-cyan-400 hover:border-cyan-400'
+            : 'border-zinc-300 dark:border-zinc-700 text-zinc-400 hover:text-cyan-400 hover:border-cyan-700'"
+          :title="isBookmarked ? 'Remove from saved' : 'Save for later'"
+        >{{ isBookmarked ? '★ saved' : '☆ save' }}</button>
+        <NuxtLink
+          v-if="auth.user?.isAdmin"
+          :to="`/posts/${post.slug}/edit`"
+          class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-700 text-zinc-400 hover:text-cyan-400"
+        >edit</NuxtLink>
+      </div>
     </header>
 
     <div v-if="post.tags?.length" class="mb-6 flex flex-wrap gap-1">

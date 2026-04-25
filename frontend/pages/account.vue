@@ -30,6 +30,7 @@ type AccountExport = {
   comments: Array<{ id: string; postId: string; body: string; createdAt: string }>
   refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>
   auditEvents: Array<{ id: string; kind: string; detail: string | null; at: string }>
+  bookmarks: Array<{ id: string; postId: string; postTitle: string; postSlug: string; savedAt: string }>
 }
 
 const AUDIT_KIND_LABELS: Record<string, string> = {
@@ -78,6 +79,37 @@ const revokeMessage = ref('')
 const newEmail = ref('')
 const requestingEmail = ref(false)
 const emailMessage = ref('')
+
+// Saved-posts panel state
+type SavedPost = {
+  id: string
+  postId: string
+  postTitle: string
+  postSlug: string
+  postAuthor: string
+  savedAt: string
+}
+const savedPosts = ref<SavedPost[]>([])
+const savedLoading = ref(false)
+async function loadSavedPosts() {
+  savedLoading.value = true
+  try {
+    savedPosts.value = await rpc.call<SavedPost[]>('bookmarks.list')
+  } catch {
+    /* surfaced via the global error pane */
+  } finally {
+    savedLoading.value = false
+  }
+}
+async function unsave(p: SavedPost) {
+  try {
+    await rpc.call<{ isBookmarked: boolean }>('bookmarks.toggle', { postId: p.postId })
+    savedPosts.value = savedPosts.value.filter(x => x.id !== p.id)
+    toast.info('Removed from saved.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e))
+  }
+}
 
 // Notification preferences panel state
 const togglingNotify = ref(false)
@@ -286,7 +318,7 @@ async function renamePasskey(p: PasskeyDto) {
 
 onMounted(async () => {
   passkeysSupported.value = isPasskeySupported()
-  await Promise.all([loadPasskeys(), loadMyLocation()])
+  await Promise.all([loadPasskeys(), loadMyLocation(), loadSavedPosts()])
 })
 
 async function loadExport() {
@@ -555,6 +587,29 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ saved posts</h2>
+        <p v-if="savedLoading" class="text-zinc-500 text-sm">loading...</p>
+        <p v-else-if="!savedPosts.length" class="text-xs text-zinc-500 italic">
+          No saved posts yet. Tap the ☆ icon on a post page to save it for later.
+        </p>
+        <ul v-else class="text-sm divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded">
+          <li v-for="p in savedPosts" :key="p.id" class="flex items-center gap-3 px-3 py-2">
+            <NuxtLink :to="`/posts/${p.postSlug}`" class="flex-1 min-w-0 hover:text-cyan-400">
+              <div class="truncate">{{ p.postTitle }}</div>
+              <div class="text-xs text-zinc-500 truncate">
+                {{ p.postAuthor }} · saved {{ new Date(p.savedAt).toLocaleDateString() }}
+              </div>
+            </NuxtLink>
+            <button
+              @click="unsave(p)"
+              class="text-xs px-2 py-1 rounded border border-red-300 dark:border-red-900 text-red-400 hover:border-red-500"
+              title="remove from saved"
+            >✕</button>
+          </li>
+        </ul>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ notifications</h2>

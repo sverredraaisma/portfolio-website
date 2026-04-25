@@ -108,6 +108,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AccountMethods>();
         services.AddScoped<LocationMethods>();
         services.AddScoped<UserMethods>();
+        services.AddScoped<BookmarkMethods>();
 
         return services;
     }
