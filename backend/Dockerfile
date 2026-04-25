@@ -2,9 +2,13 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY PortfolioApi.sln ./
 COPY src/PortfolioApi/PortfolioApi.csproj src/PortfolioApi/
-RUN dotnet restore
+# Restore the runtime project only — the .sln also lists the test
+# project, which isn't copied into the image (and shouldn't be: we
+# don't want test deps in the production layer). Scoping to the
+# csproj keeps the image lean and decouples the docker build from
+# the test project's existence.
+RUN dotnet restore src/PortfolioApi/PortfolioApi.csproj
 
 COPY src/ src/
 RUN dotnet publish src/PortfolioApi/PortfolioApi.csproj -c Release -o /app /p:UseAppHost=false
