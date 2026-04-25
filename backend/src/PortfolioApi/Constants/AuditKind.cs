@@ -13,4 +13,7 @@ public static class AuditKind
     public const string SessionsRevoked = "sessions.revoked";
     public const string PasskeyAdded = "passkey.added";
     public const string PasskeyRemoved = "passkey.removed";
+    public const string LocationShared = "location.shared";
+    public const string LocationUpdated = "location.updated";
+    public const string LocationCleared = "location.cleared";
 }

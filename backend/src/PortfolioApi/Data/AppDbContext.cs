@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Passkey> Passkeys => Set<Passkey>();
+    public DbSet<SharedLocation> SharedLocations => Set<SharedLocation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -121,6 +122,20 @@ public class AppDbContext : DbContext
             e.HasOne(p => p.User)
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<SharedLocation>(e =>
+        {
+            // One row per user — share() updates the existing row in place.
+            // location.clear() removes the row. The unique index doubles as
+            // the lookup-by-user index for the auth flow.
+            e.HasIndex(s => s.UserId).IsUnique();
+            e.Property(s => s.Label).HasMaxLength(120);
+            e.Property(s => s.Source).HasMaxLength(16);
+            e.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

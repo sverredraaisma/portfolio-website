@@ -56,6 +56,9 @@ services:
       Passkey__RpId: ${PASSKEY_RP_ID:-localhost}
       Passkey__RpName: ${PASSKEY_RP_NAME:-sverre.dev}
       Passkey__Origins__0: ${PUBLIC_ORIGIN:-http://localhost}
+      # Nominatim insists on a real User-Agent (with a contact address);
+      # missing UA → 403 from the public service.
+      Location__UserAgent: ${LOCATION_USER_AGENT:-PortfolioWebsite (set LOCATION_USER_AGENT in .env)}
     volumes:
       - backend_media:/app/media
       # Falcon-512 signing keypair, generated on first boot. Persisted so

@@ -41,6 +41,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<PasskeyOptions>()
             .Bind(cfg.GetSection(PasskeyOptions.Section));
 
+        services.AddOptions<LocationOptions>()
+            .Bind(cfg.GetSection(LocationOptions.Section));
+
         return services;
     }
 
@@ -85,12 +88,24 @@ public static class ServiceCollectionExtensions
         // the app.
         services.AddHostedService<RefreshTokenCleanupService>();
 
+        // Location feature: Nominatim geocoder via a typed HttpClient (so
+        // the User-Agent default header lives in one place) + the location
+        // service that handles upsert + AVG audit hooks.
+        services.AddHttpClient<IGeocodingService, NominatimGeocodingService>((sp, client) =>
+        {
+            var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocationOptions>>().Value;
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.UserAgent);
+            client.Timeout = TimeSpan.FromSeconds(8);
+        });
+        services.AddScoped<ILocationService, LocationService>();
+
         services.AddScoped<RpcRouter>();
         services.AddScoped<AuthMethods>();
         services.AddScoped<PostMethods>();
         services.AddScoped<CommentMethods>();
         services.AddScoped<SigningMethods>();
         services.AddScoped<AccountMethods>();
+        services.AddScoped<LocationMethods>();
 
         return services;
     }

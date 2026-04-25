@@ -42,7 +42,7 @@ public class RpcRouter
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.Ordinal);
     private readonly ILogger<RpcRouter> _log;
 
-    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, ILogger<RpcRouter> log)
+    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, LocationMethods locations, ILogger<RpcRouter> log)
     {
         _log = log;
 
@@ -96,6 +96,13 @@ public class RpcRouter
         // Account (AVG / GDPR — data export and right-to-erasure)
         Register("account.export", RpcHandlers.Typed<AccountExport>(accounts.Export));
         Register("account.delete", RpcHandlers.Typed<DeleteAccountParams, OkResult>(accounts.Delete));
+
+        // Shared locations (opt-in; rounded coords on the public list)
+        Register("location.list",        RpcHandlers.Typed<IReadOnlyList<SharedLocationDto>>(locations.List));
+        Register("location.getMine",     RpcHandlers.Typed<SharedLocationDto?>(locations.GetMine));
+        Register("location.shareCoords", RpcHandlers.Typed<ShareCoordsParams, OkResult>(locations.ShareCoords));
+        Register("location.shareNamed",  RpcHandlers.Typed<ShareNamedParams, OkResult>(locations.ShareNamed));
+        Register("location.clear",       RpcHandlers.Typed<OkResult>(locations.Clear));
     }
 
     private void Register(string method, RpcHandler handler) => _handlers[method] = handler;

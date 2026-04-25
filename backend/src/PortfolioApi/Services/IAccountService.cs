@@ -13,6 +13,10 @@ public sealed record AccountExportComment(Guid Id, Guid PostId, string Body, Dat
 public sealed record AccountExportPost(Guid Id, string Title, string Slug, DateTime CreatedAt, DateTime UpdatedAt, bool Published);
 public sealed record AccountExportRefreshToken(Guid Id, DateTime CreatedAt, DateTime ExpiresAt, DateTime? RevokedAt);
 public sealed record AccountExportAuditEvent(Guid Id, string Kind, string? Detail, DateTime At);
+/// Echoes the FULL-precision values from the row — the AVG export is meant
+/// to be exhaustive (art. 15: the user gets to see exactly what's stored).
+/// The public list applies rounding; this projection deliberately doesn't.
+public sealed record AccountExportLocation(double Latitude, double Longitude, string? Label, string Source, DateTime UpdatedAt);
 
 /// Everything the service knows about the account, in a shape suitable for
 /// JSON download. No password hashes, no salts, no raw refresh tokens — those
@@ -36,7 +40,8 @@ public sealed record AccountExport(
     IReadOnlyList<AccountExportPost> Posts,
     IReadOnlyList<AccountExportComment> Comments,
     IReadOnlyList<AccountExportRefreshToken> RefreshTokens,
-    IReadOnlyList<AccountExportAuditEvent> AuditEvents);
+    IReadOnlyList<AccountExportAuditEvent> AuditEvents,
+    AccountExportLocation? SharedLocation);
 
 public interface IAccountService
 {

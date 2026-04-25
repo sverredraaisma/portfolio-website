@@ -60,6 +60,14 @@ public class AccountService : IAccountService
             .Select(a => new AccountExportAuditEvent(a.Id, a.Kind, a.Detail, a.At))
             .ToListAsync(cancellationToken);
 
+        // Full-precision echo of the user's shared location (if any). The
+        // public list rounds; the AVG export deliberately doesn't.
+        var location = await _db.SharedLocations
+            .AsNoTracking()
+            .Where(s => s.UserId == userId)
+            .Select(s => new AccountExportLocation(s.Latitude, s.Longitude, s.Label, s.Source, s.UpdatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
         return new AccountExport(
             user.Id,
             user.Username,
@@ -74,7 +82,8 @@ public class AccountService : IAccountService
             posts,
             comments,
             refreshTokens,
-            auditEvents);
+            auditEvents,
+            location);
     }
 
     public async Task DeleteAsync(Guid userId, CommentDeletionStrategy commentStrategy, CancellationToken cancellationToken = default)
