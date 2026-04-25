@@ -207,6 +207,58 @@ public class AuthServiceTests
         email.Alerts.Should().NotContain(x => x.Action.Contains("reuse", StringComparison.OrdinalIgnoreCase));
     }
 
+    // ---- SeedAdminIfEmptyAsync (boot-critical, used in Program.cs) -----
+
+    [Fact]
+    public async Task SeedAdminIfEmptyAsync_creates_a_pre_verified_admin_on_first_call()
+    {
+        // The seed account is the only path back into a fresh deploy —
+        // EmailVerifiedAt MUST be set so the password-reset flow accepts
+        // the email; IsAdmin MUST be true so the new owner can post.
+        var (sut, db, _, _, _, _, _) = Build();
+
+        var seeded = await sut.SeedAdminIfEmptyAsync("opperautist", "owner@example.com");
+
+        seeded.Should().BeTrue();
+        var user = await db.Users.SingleAsync();
+        user.Username.Should().Be("opperautist");
+        user.Email.Should().Be("owner@example.com");
+        user.IsAdmin.Should().BeTrue();
+        user.EmailVerifiedAt.Should().NotBeNull("seed must be pre-verified or the password-reset email path is broken");
+        user.PasswordHash.Length.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task SeedAdminIfEmptyAsync_is_a_no_op_when_any_account_already_exists()
+    {
+        // Boot-time call must be idempotent — re-running migrations on a
+        // populated DB should not silently overwrite or duplicate the
+        // owner.
+        var (sut, db, _, _, _, _, _) = Build();
+        await sut.RegisterAsync("alice", "alice@example.com", ClientHashOf("hunter22"));
+        var before = await db.Users.CountAsync();
+
+        var seeded = await sut.SeedAdminIfEmptyAsync("opperautist", "owner@example.com");
+
+        seeded.Should().BeFalse();
+        (await db.Users.CountAsync()).Should().Be(before);
+    }
+
+    [Fact]
+    public async Task SeedAdminIfEmptyAsync_normalises_the_seed_username_so_a_misconfigured_value_doesnt_brick_login()
+    {
+        // A config like Admin__SeedUsername="Admin" used to slip into the
+        // DB mixed-case and then NEVER log in via the canonicalised path.
+        // The seed now applies the same NormaliseForRegister rules as
+        // user-driven registration — mixed case throws; valid lowercase
+        // is accepted as-is.
+        var (sut, _, _, _, _, _, _) = Build();
+
+        var act = async () => await sut.SeedAdminIfEmptyAsync("Admin", "owner@example.com");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*lowercase*");
+    }
+
     [Fact]
     public async Task RefreshAsync_reuse_after_the_grace_window_revokes_every_session()
     {
