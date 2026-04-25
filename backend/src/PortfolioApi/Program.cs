@@ -96,7 +96,9 @@ const string Csp =
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline'; " +
     "style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data: blob:; " +
+    // tile.openstreetmap.org (a/b/c subdomains) serves the Leaflet basemap
+    // tiles for /map. Without this, the map renders an empty grey grid.
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; " +
     "font-src 'self'; " +
     "connect-src 'self'; " +
     "frame-ancestors 'none'; " +
@@ -110,7 +112,10 @@ app.Use(async (ctx, next) =>
     h["X-Content-Type-Options"] = "nosniff";
     h["X-Frame-Options"] = "DENY";
     h["Referrer-Policy"] = "no-referrer";
-    h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    // geolocation=(self) so the /account "share my browser location" button
+    // can call navigator.geolocation. microphone/camera stay disabled — no
+    // feature on the site needs them.
+    h["Permissions-Policy"] = "geolocation=(self), microphone=(), camera=()";
     h["Cross-Origin-Opener-Policy"] = "same-origin";
     h["Cross-Origin-Resource-Policy"] = "same-origin";
     h["Content-Security-Policy"] = Csp;
