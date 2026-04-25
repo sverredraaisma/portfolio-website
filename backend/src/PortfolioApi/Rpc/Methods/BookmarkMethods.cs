@@ -33,9 +33,13 @@ public class BookmarkMethods
 
     public BookmarkMethods(AppDbContext db) => _db = db;
 
-    /// Lists the caller's bookmarks newest-first. No paging — the cap on
-    /// rows-per-user is implicit (humans don't bookmark thousands of
-    /// posts) but if it ever matters, page like CommentMethods.List does.
+    /// Hard upper bound on a single list response. The /account UI shows the
+    /// whole list inline, so unbounded growth would crash the page on a
+    /// pathological account; the AVG export still walks every row directly
+    /// against the DB.
+    private const int MaxListItems = 500;
+
+    /// Lists the caller's bookmarks newest-first. Capped at MaxListItems.
     public async Task<IReadOnlyList<BookmarkDto>> List(RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
@@ -47,6 +51,7 @@ public class BookmarkMethods
             .AsNoTracking()
             .Where(b => b.UserId == userId && b.Post!.Published)
             .OrderByDescending(b => b.CreatedAt)
+            .Take(MaxListItems)
             .Select(b => new BookmarkDto(
                 b.Id,
                 b.PostId,
@@ -81,13 +86,30 @@ public class BookmarkMethods
         try
         {
             await _db.SaveChangesAsync(ctx.CancellationToken);
+            return new BookmarkToggleResult(IsBookmarked: true);
         }
         catch (DbUpdateException)
         {
-            // Concurrent toggle from another tab — the unique index fired.
-            // Treat as a successful add, the row exists either way.
+            // Two distinct races land in this catch — distinguish by
+            // re-querying instead of inspecting provider-specific SQL
+            // states.
+            //   1. Unique-index violation: another tab beat us to the
+            //      add, the row exists, IsBookmarked=true is correct.
+            //   2. Foreign-key violation: the post was deleted between
+            //      the AnyAsync check above and the SaveChanges, the
+            //      row does NOT exist, return Post not found instead
+            //      of lying with IsBookmarked=true.
+            // Detach the failed insert before re-querying so EF's
+            // tracker doesn't try to save it again.
+            foreach (var entry in _db.ChangeTracker.Entries<Bookmark>().ToList())
+                entry.State = EntityState.Detached;
+
+            var exists = await _db.Bookmarks
+                .AsNoTracking()
+                .AnyAsync(b => b.UserId == userId && b.PostId == p.PostId, ctx.CancellationToken);
+            if (exists) return new BookmarkToggleResult(IsBookmarked: true);
+            throw new InvalidOperationException("Post not found");
         }
-        return new BookmarkToggleResult(IsBookmarked: true);
     }
 
     /// Used by the post-detail page to decide whether to show the filled

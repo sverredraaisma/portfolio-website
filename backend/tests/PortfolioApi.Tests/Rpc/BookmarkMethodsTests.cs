@@ -173,4 +173,28 @@ public class BookmarkMethodsTests
 
         res.IsBookmarked.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task List_caps_the_response_so_a_pathological_account_cant_OOM_the_UI()
+    {
+        // The /account UI inlines the whole list; an unbounded fetch would
+        // hang the page on a runaway account. 500 is the documented cap.
+        var (sut, db, reader, post, _) = Setup();
+        for (int i = 0; i < 510; i++)
+        {
+            db.Posts.Add(new Post
+            {
+                Title = $"p{i}", Slug = $"p-{i}", AuthorId = post.AuthorId, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}")
+            });
+        }
+        await db.SaveChangesAsync();
+        foreach (var p in await db.Posts.ToListAsync())
+            db.Bookmarks.Add(new Bookmark { UserId = reader.Id, PostId = p.Id });
+        await db.SaveChangesAsync();
+
+        var rows = await sut.List(TestRpcContext.User(reader.Id));
+
+        rows.Should().HaveCount(500);
+    }
 }
