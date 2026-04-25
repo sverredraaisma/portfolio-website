@@ -21,7 +21,7 @@ public class CommentMethodsTests
         test.Db.Posts.Add(post);
         test.Db.SaveChanges();
         test.Db.ChangeTracker.Clear();
-        return (new CommentMethods(test.Db), test.Db, author, other, post);
+        return (new CommentMethods(test.Db, new CommentThrottle()), test.Db, author, other, post);
     }
 
     [Fact]

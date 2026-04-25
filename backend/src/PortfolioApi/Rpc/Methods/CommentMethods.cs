@@ -55,8 +55,13 @@ public sealed record CommentModerationDto(
 public class CommentMethods
 {
     private readonly AppDbContext _db;
+    private readonly ICommentThrottle _throttle;
 
-    public CommentMethods(AppDbContext db) => _db = db;
+    public CommentMethods(AppDbContext db, ICommentThrottle throttle)
+    {
+        _db = db;
+        _throttle = throttle;
+    }
 
     public async Task<PaginatedResult<CommentDto>> List(ListCommentsParams p, RpcContext ctx)
     {
@@ -88,6 +93,11 @@ public class CommentMethods
     public async Task<CommentDto> Create(CreateCommentParams p, RpcContext ctx)
     {
         var userId = ctx.RequireUserId();
+        // Per-user sliding-window cap. Same shape as the login throttle —
+        // throws AuthFailedException so the router maps to 401 with the
+        // generic "Not authorized" wire message; the specific reason stays
+        // in server logs.
+        _throttle.EnsureCanComment(userId);
 
         var body = p.Body.Trim();
         if (body.Length == 0) throw new InvalidOperationException("body required");
@@ -99,6 +109,7 @@ public class CommentMethods
         var c = new Comment { PostId = p.PostId, AuthorId = userId, Body = body };
         _db.Comments.Add(c);
         await _db.SaveChangesAsync(ctx.CancellationToken);
+        _throttle.Record(userId);
 
         var author = await _db.Users
             .AsNoTracking()

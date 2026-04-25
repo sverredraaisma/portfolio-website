@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITotpService, TotpService>();
         // Singleton: per-username failure counter is process-wide state.
         services.AddSingleton<ILoginThrottle, LoginThrottle>();
+        services.AddSingleton<ICommentThrottle, CommentThrottle>();
 
         // Passkey / WebAuthn (Fido2NetLib). The library wants a Fido2Configuration
         // up-front; it has no IOptions integration, so we build it from the
