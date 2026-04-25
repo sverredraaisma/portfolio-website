@@ -143,7 +143,7 @@ useHead({
           <template v-if="p.commentCount > 0">
             ·
             <NuxtLink
-              :to="`/posts/${p.slug}#c-`"
+              :to="`/posts/${p.slug}#comments`"
               class="hover:text-cyan-500"
               :title="`${p.commentCount} ${p.commentCount === 1 ? 'comment' : 'comments'}`"
             >💬 {{ p.commentCount }}</NuxtLink>

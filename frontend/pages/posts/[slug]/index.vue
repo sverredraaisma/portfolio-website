@@ -154,7 +154,7 @@ watch(() => post.value?.id, refreshBookmarkState, { immediate: true })
       </NuxtLink>
     </nav>
 
-    <section class="mt-12">
+    <section id="comments" class="mt-12 scroll-mt-16">
       <h2 class="text-sm text-zinc-500 mb-2">// comments</h2>
       <TerminalComments :post-id="post.id" />
     </section>
