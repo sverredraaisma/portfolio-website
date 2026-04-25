@@ -186,6 +186,51 @@ public class PostMethodsTests
         stored.Tags.Should().BeEquivalentTo(new[] { "rust" }, "tags untouched when not supplied");
     }
 
+    // ---- Tags aggregate ---------------------------------------------------
+
+    [Fact]
+    public async Task Tags_lists_all_published_tag_counts_sorted_by_count_desc_then_alpha()
+    {
+        var (sut, _, admin, _) = Setup();
+        // 3 published posts: rust×2, design×1, tooling×2 (sorted: rust=2, tooling=2, design=1)
+        await sut.Create(new CreatePostParams { Title = "p1", Slug = "p1", Blocks = Blocks(), Published = true, Tags = new[] { "rust", "tooling" } }, TestRpcContext.Admin(admin.Id));
+        await sut.Create(new CreatePostParams { Title = "p2", Slug = "p2", Blocks = Blocks(), Published = true, Tags = new[] { "rust", "design" } }, TestRpcContext.Admin(admin.Id));
+        await sut.Create(new CreatePostParams { Title = "p3", Slug = "p3", Blocks = Blocks(), Published = true, Tags = new[] { "tooling" } }, TestRpcContext.Admin(admin.Id));
+
+        var tags = await sut.Tags(TestRpcContext.Anonymous());
+
+        tags.Should().BeEquivalentTo(new[]
+        {
+            new TagCount("rust", 2),
+            new TagCount("tooling", 2),
+            new TagCount("design", 1)
+        }, opts => opts.WithStrictOrdering());
+    }
+
+    [Fact]
+    public async Task Tags_excludes_drafts_so_unpublished_tags_dont_leak()
+    {
+        // A tag that only appears on drafts must not surface — the public
+        // /tags page would otherwise give away unreleased work topics.
+        var (sut, _, admin, _) = Setup();
+        await sut.Create(new CreatePostParams { Title = "live", Slug = "live", Blocks = Blocks(), Published = true,  Tags = new[] { "shipping" } }, TestRpcContext.Admin(admin.Id));
+        await sut.Create(new CreatePostParams { Title = "wip",  Slug = "wip",  Blocks = Blocks(), Published = false, Tags = new[] { "secret-project" } }, TestRpcContext.Admin(admin.Id));
+
+        var tags = await sut.Tags(TestRpcContext.Anonymous());
+
+        tags.Select(t => t.Tag).Should().BeEquivalentTo(new[] { "shipping" });
+    }
+
+    [Fact]
+    public async Task Tags_returns_an_empty_list_when_no_published_post_carries_tags()
+    {
+        var (sut, _, _, _) = Setup();
+
+        var tags = await sut.Tags(TestRpcContext.Anonymous());
+
+        tags.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Delete_rejects_non_owner_admin()
     {

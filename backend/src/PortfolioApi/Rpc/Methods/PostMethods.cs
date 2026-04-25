@@ -61,6 +61,11 @@ public sealed record UploadImageParams
 
 public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, IReadOnlyList<string> Tags);
 
+/// One entry in the tag-cloud response. `count` is the number of *published*
+/// posts carrying the tag — drafts don't contribute, since they're invisible
+/// to the public anyway.
+public sealed record TagCount(string Tag, int Count);
+
 public sealed record PostDetail(
     Guid Id,
     string Title,
@@ -142,6 +147,28 @@ public class PostMethods
     // literal "%" in user input matches itself.
     private static string EscapeLike(string s) =>
         s.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
+
+    /// All tags across published posts, with per-tag counts. Returned sorted
+    /// by count desc, tag asc — the /tags page renders this as a cloud.
+    /// Aggregation runs client-side after pulling the (small) tag arrays:
+    /// EF's translator can't unnest a Postgres text[] across providers and
+    /// the cardinality on a portfolio site doesn't justify raw SQL.
+    public async Task<IReadOnlyList<TagCount>> Tags(RpcContext ctx)
+    {
+        var arrays = await _db.Posts
+            .AsNoTracking()
+            .Where(p => p.Published)
+            .Select(p => p.Tags)
+            .ToListAsync(ctx.CancellationToken);
+
+        return arrays
+            .SelectMany(t => t)
+            .GroupBy(t => t)
+            .Select(g => new TagCount(g.Key, g.Count()))
+            .OrderByDescending(t => t.Count)
+            .ThenBy(t => t.Tag, StringComparer.Ordinal)
+            .ToList();
+    }
 
     public async Task<PostDetail> Get(GetPostParams p, RpcContext ctx)
     {

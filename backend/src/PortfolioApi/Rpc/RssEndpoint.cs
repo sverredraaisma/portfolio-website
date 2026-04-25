@@ -127,6 +127,8 @@ public static class RssEndpoint
                 var today = DateTime.UtcNow;
                 WriteUrl(writer, $"{origin}/", today, "weekly", "1.0");
                 WriteUrl(writer, $"{origin}/posts", today, "daily", "0.9");
+                WriteUrl(writer, $"{origin}/tags", today, "weekly", "0.7");
+                WriteUrl(writer, $"{origin}/map", today, "weekly", "0.5");
                 WriteUrl(writer, $"{origin}/verify-statement", today, "yearly", "0.4");
                 WriteUrl(writer, $"{origin}/privacy", today, "yearly", "0.4");
 

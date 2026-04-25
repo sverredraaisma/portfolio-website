@@ -65,6 +65,7 @@ export function bindShortcuts(ctx: ShortcutContext) {
         case 'a': e.preventDefault(); ctx.router.push('/account'); return
         case 'v': e.preventDefault(); ctx.router.push('/verify-statement'); return
         case 'l': e.preventDefault(); ctx.router.push('/map'); return
+        case 't': e.preventDefault(); ctx.router.push('/tags'); return
         case 'm': e.preventDefault(); ctx.router.push('/admin/comments'); return
         case 'n': e.preventDefault(); ctx.router.push('/posts/new'); return
       }
@@ -94,6 +95,7 @@ export const SHORTCUTS = [
   { keys: 'g h', label: 'Go to home' },
   { keys: 'g p', label: 'Go to posts' },
   { keys: 'g l', label: 'Go to the map' },
+  { keys: 'g t', label: 'Go to the tag cloud' },
   { keys: 'g v', label: 'Go to verify-statement' },
   { keys: 'g a', label: 'Go to account (when signed in)' },
   { keys: 'g m', label: 'Go to moderation queue (admin)' },
