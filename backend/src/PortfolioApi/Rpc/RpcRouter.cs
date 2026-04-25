@@ -82,6 +82,7 @@ public class RpcRouter
         Register("posts.uploadImage", RpcHandlers.Typed<UploadImageParams, ImageUploadResult>(posts.UploadImage));
         Register("posts.tags", RpcHandlers.Typed<IReadOnlyList<TagCount>>(posts.Tags));
         Register("posts.adjacent", RpcHandlers.Typed<GetAdjacentParams, AdjacentPostsResult>(posts.Adjacent));
+        Register("posts.random", RpcHandlers.Typed<RandomPostResult>(posts.Random));
 
         // Comments
         Register("comments.list", RpcHandlers.Typed<ListCommentsParams, PaginatedResult<CommentDto>>(comments.List));

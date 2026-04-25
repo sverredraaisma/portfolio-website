@@ -61,14 +61,16 @@ public class PostMethodsTests
         res.Slug.Should().Be("hello-world");
     }
 
-    [Fact]
-    public async Task Create_rejects_the_reserved_new_slug_so_it_doesnt_collide_with_the_editor_route()
+    [Theory]
+    [InlineData("new")]      // file-routed admin editor
+    [InlineData("random")]   // file-routed surprise-me redirect
+    public async Task Create_rejects_a_reserved_slug_so_it_doesnt_shadow_a_file_routed_page(string reserved)
     {
         var (sut, _, admin, _) = Setup();
 
         var act = async () => await sut.Create(new CreatePostParams
         {
-            Title = "x", Slug = "new", Blocks = Blocks()
+            Title = "x", Slug = reserved, Blocks = Blocks()
         }, TestRpcContext.Admin(admin.Id));
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*reserved*");
@@ -329,6 +331,47 @@ public class PostMethodsTests
 
         res.Previous!.Slug.Should().Be("pub-old");
         res.Next!.Slug.Should().Be("pub-new");
+    }
+
+    // ---- Random (surprise-me redirect) ----------------------------------
+
+    [Fact]
+    public async Task Random_returns_null_slug_when_no_post_is_published()
+    {
+        // The frontend uses null as the "nothing here yet" signal — without
+        // it, /posts/random would 302 to /posts/ which renders an empty
+        // list rather than a friendly empty state.
+        var (sut, db, admin, _) = Setup();
+        // A draft on its own must not be picked.
+        db.Posts.Add(new Post { Title = "draft", Slug = "draft", AuthorId = admin.Id, Published = false,
+            Blocks = JsonDocument.Parse("{\"blocks\":[]}") });
+        await db.SaveChangesAsync();
+
+        var res = await sut.Random(TestRpcContext.Anonymous());
+
+        res.Slug.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Random_returns_a_published_slug_and_never_a_draft()
+    {
+        var (sut, db, admin, _) = Setup();
+        db.Posts.AddRange(
+            new Post { Title = "live-1", Slug = "live-1", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}") },
+            new Post { Title = "live-2", Slug = "live-2", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}") },
+            new Post { Title = "draft",  Slug = "draft",  AuthorId = admin.Id, Published = false,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}") });
+        await db.SaveChangesAsync();
+
+        // Sample several times to make a draft-leak failure overwhelmingly
+        // likely if the Where(Published) ever regresses.
+        for (int i = 0; i < 30; i++)
+        {
+            var res = await sut.Random(TestRpcContext.Anonymous());
+            res.Slug.Should().BeOneOf("live-1", "live-2");
+        }
     }
 
     [Fact]

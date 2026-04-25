@@ -76,6 +76,10 @@ public sealed record GetAdjacentParams
     public required string Slug { get; init; }
 }
 
+/// One slug, picked at random from the published archive. The /posts/random
+/// route on the frontend hits this and 302s to /posts/<slug>.
+public sealed record RandomPostResult(string? Slug);
+
 public sealed record PostDetail(
     Guid Id,
     string Title,
@@ -157,6 +161,28 @@ public class PostMethods
     // literal "%" in user input matches itself.
     private static string EscapeLike(string s) =>
         s.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
+
+    /// Picks one published post at random. Returns null when the archive is
+    /// empty so the frontend can render a "nothing here yet" page instead
+    /// of bouncing through a 404. Two-step (COUNT + Skip) so the query
+    /// translates on every provider — Guid.NewGuid() in OrderBy doesn't.
+    /// At portfolio cardinality the COUNT is trivial.
+    public async Task<RandomPostResult> Random(RpcContext ctx)
+    {
+        var total = await _db.Posts.AsNoTracking()
+            .CountAsync(p => p.Published, ctx.CancellationToken);
+        if (total == 0) return new RandomPostResult(null);
+
+        var offset = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, total);
+        var slug = await _db.Posts.AsNoTracking()
+            .Where(p => p.Published)
+            .OrderBy(p => p.Id)
+            .Skip(offset)
+            .Select(p => p.Slug)
+            .FirstOrDefaultAsync(ctx.CancellationToken);
+
+        return new RandomPostResult(slug);
+    }
 
     /// "Previous" (older) and "next" (newer) neighbours of the named post in
     /// the public timeline, ordered by CreatedAt. Drafts never appear as a
@@ -380,8 +406,17 @@ public class PostMethods
         }
         var slug = sb.ToString().Trim('-');
         if (slug.Length == 0) throw new InvalidOperationException("slug must contain letters or digits");
-        // Avoid colliding with the file-routed /posts/new editor.
-        if (slug == "new") throw new InvalidOperationException("slug 'new' is reserved");
+        // Avoid colliding with file-routed pages under /posts/. Adding a
+        // page here means adding the segment to this set so an admin can't
+        // accidentally shadow it with a real post.
+        if (ReservedSlugs.Contains(slug))
+            throw new InvalidOperationException($"slug '{slug}' is reserved");
         return slug;
     }
+
+    private static readonly HashSet<string> ReservedSlugs = new(StringComparer.Ordinal)
+    {
+        "new",     // /posts/new        — admin editor
+        "random"   // /posts/random     — surprise-me redirect
+    };
 }
