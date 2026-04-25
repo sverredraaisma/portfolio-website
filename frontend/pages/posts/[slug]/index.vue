@@ -24,6 +24,16 @@ const { data: post } = await useAsyncData<PostFull>(
   { watch: [slug] }
 )
 
+type Neighbour = { title: string; slug: string }
+type Adjacent = { previous: Neighbour | null; next: Neighbour | null }
+const { data: adjacent } = await useAsyncData<Adjacent>(
+  () => `post-adjacent:${slug.value}`,
+  () => rpc.call<Adjacent>('posts.adjacent', { slug: slug.value }),
+  // Tolerate unknown slug here — the post fetcher above will already have
+  // surfaced the not-found state, no need to also blow up the prev/next.
+  { watch: [slug], default: () => ({ previous: null, next: null }) }
+)
+
 // Pull a usable description out of the post body: first text block, falling
 // back to the first header. Trimmed to a sensible meta length.
 function description(blocks: Block[] | undefined): string {
@@ -119,6 +129,30 @@ watch(() => post.value?.id, refreshBookmarkState, { immediate: true })
     <div class="space-y-6">
       <BlockRenderer v-for="b in post.blocks.blocks" :key="b.id" :block="b" />
     </div>
+
+    <nav
+      v-if="adjacent && (adjacent.previous || adjacent.next)"
+      class="mt-12 grid grid-cols-2 gap-3 text-sm border-t border-zinc-200 dark:border-zinc-800 pt-4"
+      aria-label="adjacent posts"
+    >
+      <NuxtLink
+        v-if="adjacent.previous"
+        :to="`/posts/${adjacent.previous.slug}`"
+        class="border border-zinc-300 dark:border-zinc-800 rounded p-3 hover:border-cyan-700 transition"
+      >
+        <div class="text-xs text-zinc-500 mb-1">← previous</div>
+        <div class="text-cyan-500 dark:text-cyan-400 truncate">{{ adjacent.previous.title }}</div>
+      </NuxtLink>
+      <span v-else />
+      <NuxtLink
+        v-if="adjacent.next"
+        :to="`/posts/${adjacent.next.slug}`"
+        class="border border-zinc-300 dark:border-zinc-800 rounded p-3 hover:border-cyan-700 transition text-right"
+      >
+        <div class="text-xs text-zinc-500 mb-1">next →</div>
+        <div class="text-cyan-500 dark:text-cyan-400 truncate">{{ adjacent.next.title }}</div>
+      </NuxtLink>
+    </nav>
 
     <section class="mt-12">
       <h2 class="text-sm text-zinc-500 mb-2">// comments</h2>

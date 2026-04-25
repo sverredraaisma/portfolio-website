@@ -66,6 +66,16 @@ public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime Cr
 /// to the public anyway.
 public sealed record TagCount(string Tag, int Count);
 
+/// Just the fields needed for a "← previous · next →" link at the bottom of
+/// a post page. Either neighbour can be null at the timeline edges.
+public sealed record AdjacentPostsResult(PostNeighbour? Previous, PostNeighbour? Next);
+public sealed record PostNeighbour(string Title, string Slug);
+
+public sealed record GetAdjacentParams
+{
+    public required string Slug { get; init; }
+}
+
 public sealed record PostDetail(
     Guid Id,
     string Title,
@@ -147,6 +157,42 @@ public class PostMethods
     // literal "%" in user input matches itself.
     private static string EscapeLike(string s) =>
         s.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
+
+    /// "Previous" (older) and "next" (newer) neighbours of the named post in
+    /// the public timeline, ordered by CreatedAt. Drafts never appear as a
+    /// neighbour — they're invisible to the public so a link to one would
+    /// 404. The named post itself can be a draft (admin viewing their own
+    /// draft from the editor preview); we still walk the neighbour chain
+    /// against published posts only.
+    public async Task<AdjacentPostsResult> Adjacent(GetAdjacentParams p, RpcContext ctx)
+    {
+        var current = await _db.Posts
+            .AsNoTracking()
+            .Where(x => x.Slug == p.Slug)
+            .Select(x => new { x.Id, x.CreatedAt })
+            .FirstOrDefaultAsync(ctx.CancellationToken)
+            ?? throw new InvalidOperationException("Post not found");
+
+        // Older = strictly smaller CreatedAt. Newer = strictly larger.
+        // Strict inequality avoids returning the post itself when two
+        // posts share a CreatedAt down to the tick (rare but possible
+        // on bulk seed scripts).
+        var previous = await _db.Posts
+            .AsNoTracking()
+            .Where(x => x.Published && x.CreatedAt < current.CreatedAt && x.Id != current.Id)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new PostNeighbour(x.Title, x.Slug))
+            .FirstOrDefaultAsync(ctx.CancellationToken);
+
+        var next = await _db.Posts
+            .AsNoTracking()
+            .Where(x => x.Published && x.CreatedAt > current.CreatedAt && x.Id != current.Id)
+            .OrderBy(x => x.CreatedAt)
+            .Select(x => new PostNeighbour(x.Title, x.Slug))
+            .FirstOrDefaultAsync(ctx.CancellationToken);
+
+        return new AdjacentPostsResult(previous, next);
+    }
 
     /// All tags across published posts, with per-tag counts. Returned sorted
     /// by count desc, tag asc — the /tags page renders this as a cloud.

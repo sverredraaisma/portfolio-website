@@ -81,6 +81,7 @@ public class RpcRouter
         Register("posts.delete", RpcHandlers.Typed<DeletePostParams, OkResult>(posts.Delete));
         Register("posts.uploadImage", RpcHandlers.Typed<UploadImageParams, ImageUploadResult>(posts.UploadImage));
         Register("posts.tags", RpcHandlers.Typed<IReadOnlyList<TagCount>>(posts.Tags));
+        Register("posts.adjacent", RpcHandlers.Typed<GetAdjacentParams, AdjacentPostsResult>(posts.Adjacent));
 
         // Comments
         Register("comments.list", RpcHandlers.Typed<ListCommentsParams, PaginatedResult<CommentDto>>(comments.List));

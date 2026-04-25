@@ -231,6 +231,106 @@ public class PostMethodsTests
         tags.Should().BeEmpty();
     }
 
+    // ---- Adjacent (prev/next nav) ---------------------------------------
+
+    [Fact]
+    public async Task Adjacent_walks_the_published_timeline_around_the_named_post()
+    {
+        var (sut, db, admin, _) = Setup();
+        // Three published posts at known times: older < target < newer
+        db.Posts.AddRange(
+            new Post { Title = "older",  Slug = "older",  AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "target", Slug = "target", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "newer",  Slug = "newer",  AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+
+        var res = await sut.Adjacent(new GetAdjacentParams { Slug = "target" }, TestRpcContext.Anonymous());
+
+        res.Previous!.Slug.Should().Be("older");
+        res.Next!.Slug.Should().Be("newer");
+    }
+
+    [Fact]
+    public async Task Adjacent_returns_null_neighbours_at_the_timeline_edges()
+    {
+        var (sut, db, admin, _) = Setup();
+        db.Posts.AddRange(
+            new Post { Title = "first", Slug = "first", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "last",  Slug = "last",  AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+
+        var atOldest = await sut.Adjacent(new GetAdjacentParams { Slug = "first" }, TestRpcContext.Anonymous());
+        atOldest.Previous.Should().BeNull("nothing older than the oldest post");
+        atOldest.Next!.Slug.Should().Be("last");
+
+        var atNewest = await sut.Adjacent(new GetAdjacentParams { Slug = "last" }, TestRpcContext.Anonymous());
+        atNewest.Previous!.Slug.Should().Be("first");
+        atNewest.Next.Should().BeNull("nothing newer than the newest post");
+    }
+
+    [Fact]
+    public async Task Adjacent_skips_drafts_so_the_link_chain_doesnt_404()
+    {
+        // A draft sandwiched between two published posts must not appear as
+        // a neighbour — clicking the link from a public reader would hit the
+        // not-found path on /posts/<slug>.
+        var (sut, db, admin, _) = Setup();
+        db.Posts.AddRange(
+            new Post { Title = "before",  Slug = "before",  AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "draft",   Slug = "draft",   AuthorId = admin.Id, Published = false,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "target",  Slug = "target",  AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "draft2",  Slug = "draft2",  AuthorId = admin.Id, Published = false,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "after",   Slug = "after",   AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+
+        var res = await sut.Adjacent(new GetAdjacentParams { Slug = "target" }, TestRpcContext.Anonymous());
+
+        res.Previous!.Slug.Should().Be("before", "draft must be skipped");
+        res.Next!.Slug.Should().Be("after",  "draft2 must be skipped");
+    }
+
+    [Fact]
+    public async Task Adjacent_throws_post_not_found_for_an_unknown_slug()
+    {
+        var (sut, _, _, _) = Setup();
+
+        var act = async () => await sut.Adjacent(new GetAdjacentParams { Slug = "ghost" }, TestRpcContext.Anonymous());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Post not found");
+    }
+
+    [Fact]
+    public async Task Adjacent_works_for_a_draft_target_walking_only_published_neighbours()
+    {
+        // The author hitting the editor preview of an unpublished draft can
+        // still call posts.adjacent — we walk the public chain, not the
+        // draft's slot. Both neighbours come from the published set.
+        var (sut, db, admin, _) = Setup();
+        db.Posts.AddRange(
+            new Post { Title = "pub-old", Slug = "pub-old", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "draft",   Slug = "draft",   AuthorId = admin.Id, Published = false,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+            new Post { Title = "pub-new", Slug = "pub-new", AuthorId = admin.Id, Published = true,
+                Blocks = JsonDocument.Parse("{\"blocks\":[]}"), CreatedAt = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+
+        var res = await sut.Adjacent(new GetAdjacentParams { Slug = "draft" }, TestRpcContext.Anonymous());
+
+        res.Previous!.Slug.Should().Be("pub-old");
+        res.Next!.Slug.Should().Be("pub-new");
+    }
+
     [Fact]
     public async Task Delete_rejects_non_owner_admin()
     {
