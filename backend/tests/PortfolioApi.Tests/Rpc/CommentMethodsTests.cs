@@ -124,7 +124,7 @@ public class CommentMethodsTests
     }
 
     [Fact]
-    public async Task Update_lets_the_author_rewrite_their_own_comment()
+    public async Task Update_lets_the_author_rewrite_their_own_comment_and_stamps_UpdatedAt()
     {
         var (sut, db, author, _, post, _) = Setup();
         var c = new Comment { PostId = post.Id, AuthorId = author.Id, Body = "first draft" };
@@ -137,7 +137,31 @@ public class CommentMethodsTests
             TestRpcContext.User(author.Id));
 
         dto.Body.Should().Be("second draft");
-        (await db.Comments.SingleAsync()).Body.Should().Be("second draft");
+        dto.UpdatedAt.Should().NotBeNull("the wire payload carries the edit stamp so the frontend can show (edited)");
+        var stored = await db.Comments.SingleAsync();
+        stored.Body.Should().Be("second draft");
+        stored.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Update_with_an_identical_body_does_not_stamp_UpdatedAt()
+    {
+        // A no-op save — trimmed body matches what's already stored — must
+        // not light up the (edited) marker.
+        var (sut, db, author, _, post, _) = Setup();
+        var c = new Comment { PostId = post.Id, AuthorId = author.Id, Body = "hello" };
+        db.Comments.Add(c);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Whitespace round it; the SUT trims before comparing, so this
+        // resolves to the same byte-equal "hello" already in storage.
+        var dto = await sut.Update(
+            new UpdateCommentParams { Id = c.Id, Body = "  hello  " },
+            TestRpcContext.User(author.Id));
+
+        dto.UpdatedAt.Should().BeNull("a body that trims to the stored value isn't an edit");
+        (await db.Comments.SingleAsync()).UpdatedAt.Should().BeNull();
     }
 
     [Fact]

@@ -6,6 +6,7 @@ type Comment = {
   id: string
   body: string
   createdAt: string
+  updatedAt?: string | null
   author: string
   authorIsAdmin: boolean
   authorId?: string
@@ -177,6 +178,11 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
             <span v-if="editError" class="block text-xs text-red-400">{{ editError }}</span>
           </template>
           <span v-else class="whitespace-pre-wrap">{{ c.body }}</span>
+          <span
+            v-if="c.updatedAt"
+            class="text-zinc-600 text-xs ml-1"
+            :title="`edited ${formatTime(c.updatedAt)}`"
+          >(edited)</span>
         </div>
 
         <div v-if="editingId !== c.id" class="ml-2 flex gap-2 opacity-0 group-hover:opacity-100 text-xs">

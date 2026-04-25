@@ -39,13 +39,14 @@ public sealed record UpdateCommentParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, string Author, bool AuthorIsAdmin);
+public sealed record CommentDto(Guid Id, string Body, DateTime CreatedAt, DateTime? UpdatedAt, string Author, bool AuthorIsAdmin);
 
 /// Moderation view: includes the host post so the moderator can jump to it.
 public sealed record CommentModerationDto(
     Guid Id,
     string Body,
     DateTime CreatedAt,
+    DateTime? UpdatedAt,
     string Author,
     bool AuthorIsAdmin,
     Guid PostId,
@@ -84,6 +85,7 @@ public class CommentMethods
                 c.Id,
                 c.Body,
                 c.CreatedAt,
+                c.UpdatedAt,
                 c.Author == null ? "anonymous" : c.Author.Username,
                 c.Author != null && c.Author.IsAdmin))
             .ToListAsync(ctx.CancellationToken);
@@ -157,7 +159,7 @@ public class CommentMethods
             }
         }
 
-        return new CommentDto(c.Id, c.Body, c.CreatedAt, author.Username, author.IsAdmin);
+        return new CommentDto(c.Id, c.Body, c.CreatedAt, c.UpdatedAt, author.Username, author.IsAdmin);
     }
 
     public async Task<OkResult> Delete(DeleteCommentParams p, RpcContext ctx)
@@ -194,6 +196,7 @@ public class CommentMethods
                 c.Id,
                 c.Body,
                 c.CreatedAt,
+                c.UpdatedAt,
                 c.Author == null ? "anonymous" : c.Author.Username,
                 c.Author != null && c.Author.IsAdmin,
                 c.PostId,
@@ -225,13 +228,22 @@ public class CommentMethods
         if (c.AuthorId != userId)
             throw new AuthFailedException("Not your comment");
 
-        c.Body = body;
-        await _db.SaveChangesAsync(ctx.CancellationToken);
+        // Stamp the edit so the wire payload (and the public UI) can show
+        // an "(edited)" marker. Skip when the body is byte-identical to
+        // what's already stored — preserves the "never touched" state on
+        // a no-op save.
+        if (!string.Equals(c.Body, body, StringComparison.Ordinal))
+        {
+            c.Body = body;
+            c.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ctx.CancellationToken);
+        }
 
         return new CommentDto(
             c.Id,
             c.Body,
             c.CreatedAt,
+            c.UpdatedAt,
             c.Author == null ? "anonymous" : c.Author.Username,
             c.Author != null && c.Author.IsAdmin);
     }

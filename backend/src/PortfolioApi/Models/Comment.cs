@@ -6,6 +6,11 @@ public class Comment
     public string Body { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// Set when the author edits the body via comments.update. Null means
+    /// "never edited" — the frontend uses presence to show the (edited)
+    /// marker and the value as the tooltip timestamp.
+    public DateTime? UpdatedAt { get; set; }
+
     public Guid PostId { get; set; }
     public Post? Post { get; set; }
 

@@ -11,6 +11,7 @@ type ModRow = {
   id: string
   body: string
   createdAt: string
+  updatedAt?: string | null
   author: string
   authorIsAdmin: boolean
   postId: string
@@ -91,7 +92,14 @@ onMounted(() => load(1))
               on "{{ r.postTitle }}"
             </NuxtLink>
           </div>
-          <p class="mt-1 text-sm whitespace-pre-wrap break-words">{{ r.body }}</p>
+          <p class="mt-1 text-sm whitespace-pre-wrap break-words">
+            {{ r.body }}
+            <span
+              v-if="r.updatedAt"
+              class="text-zinc-500 text-xs ml-1"
+              :title="`edited ${formatTime(r.updatedAt)}`"
+            >(edited)</span>
+          </p>
         </div>
         <button
           :disabled="busyId === r.id"
