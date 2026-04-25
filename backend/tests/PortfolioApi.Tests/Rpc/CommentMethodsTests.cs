@@ -28,7 +28,10 @@ public class CommentMethodsTests
         };
         var other = new User { Username = "bob", Email = "b@x", PasswordHash = new byte[]{1}, PasswordSalt = new byte[]{1} };
         test.Db.Users.AddRange(author, other);
-        var post = new Post { Title = "t", Slug = "t", AuthorId = author.Id };
+        // Published = true by default so the new "hide comments on
+        // unpublished posts" filter doesn't accidentally hide every
+        // comment seeded by the existing tests.
+        var post = new Post { Title = "t", Slug = "t", AuthorId = author.Id, Published = true };
         test.Db.Posts.Add(post);
         test.Db.SaveChanges();
         test.Db.ChangeTracker.Clear();
@@ -105,6 +108,25 @@ public class CommentMethodsTests
         page.Items.Should().HaveCount(1);
         page.Items[0].Author.Should().Be("anonymous");
         page.Items[0].AuthorIsAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task List_hides_comments_on_unpublished_posts_so_drafts_dont_leak_via_postId()
+    {
+        // posts.get already 404s an unpublished post for non-authors —
+        // comments.list must follow suit, otherwise a caller who saved
+        // the postId before the post was unpublished could keep pulling
+        // the discussion.
+        var (sut, db, author, _, post, _) = Setup();
+        db.Comments.Add(new Comment { PostId = post.Id, AuthorId = author.Id, Body = "still here?" });
+        var live = await db.Posts.SingleAsync(p => p.Id == post.Id);
+        live.Published = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var page = await sut.List(new ListCommentsParams { PostId = post.Id }, TestRpcContext.Anonymous());
+
+        page.Items.Should().BeEmpty();
     }
 
     [Fact]

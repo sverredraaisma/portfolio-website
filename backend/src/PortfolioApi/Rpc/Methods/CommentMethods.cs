@@ -73,9 +73,15 @@ public class CommentMethods
         var page = p.Page < 1 ? 1 : p.Page;
         var pageSize = Math.Clamp(p.PageSize, 1, 200);
 
+        // Hide comments on unpublished posts — once a post is taken
+        // back to draft, its comment thread shouldn't be reachable to
+        // a caller who happens to know the postId. The post-author
+        // (admin) keeps access via includeDrafts on the post fetch
+        // path; this list endpoint is anonymous-by-design and there's
+        // no need to expose draft discussion here.
         var rows = await _db.Comments
             .AsNoTracking()
-            .Where(c => c.PostId == p.PostId)
+            .Where(c => c.PostId == p.PostId && c.Post!.Published)
             .OrderBy(c => c.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
