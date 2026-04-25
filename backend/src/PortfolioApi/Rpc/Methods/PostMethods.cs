@@ -89,6 +89,9 @@ public sealed record PostDetail(
     DateTime? UpdatedAt,
     bool Published,
     string Author,
+    /// Author's public bio. Empty when unset; the frontend uses presence
+    /// to decide whether to render the about-the-author block.
+    string AuthorBio,
     IReadOnlyList<string> Tags);
 
 public sealed record CreatePostResult(Guid Id, string Slug);
@@ -282,6 +285,7 @@ public class PostMethods
             post.UpdatedAt,
             post.Published,
             post.Author!.Username,
+            post.Author.Bio ?? string.Empty,
             post.Tags);
     }
 

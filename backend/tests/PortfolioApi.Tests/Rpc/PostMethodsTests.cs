@@ -183,6 +183,31 @@ public class PostMethodsTests
     }
 
     [Fact]
+    public async Task Get_returns_the_authors_bio_so_the_post_page_can_render_an_author_block()
+    {
+        var (sut, db, admin, _) = Setup();
+        var u = await db.Users.FirstAsync(x => x.Username == "admin");
+        u.Bio = "I write about Rust and synthesizers.";
+        await db.SaveChangesAsync();
+        var created = await sut.Create(new CreatePostParams { Title = "t", Slug = "t", Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+
+        var got = await sut.Get(new GetPostParams { Slug = created.Slug }, TestRpcContext.Anonymous());
+
+        got.AuthorBio.Should().Be("I write about Rust and synthesizers.");
+    }
+
+    [Fact]
+    public async Task Get_returns_an_empty_AuthorBio_when_the_author_has_not_set_one()
+    {
+        var (sut, _, admin, _) = Setup();
+        var created = await sut.Create(new CreatePostParams { Title = "t", Slug = "t", Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+
+        var got = await sut.Get(new GetPostParams { Slug = created.Slug }, TestRpcContext.Anonymous());
+
+        got.AuthorBio.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Get_drafts_404_for_strangers()
     {
         var (sut, _, admin, member) = Setup();

@@ -9,7 +9,7 @@ import { useToast } from '~/composables/useToast'
 
 type PostFull = {
   id: string; title: string; slug: string;
-  blocks: PostDocument; createdAt: string; updatedAt: string; author: string; tags: string[]
+  blocks: PostDocument; createdAt: string; updatedAt: string; author: string; authorBio: string; tags: string[]
 }
 const route = useRoute()
 const rpc = useRpc()
@@ -195,6 +195,19 @@ watch(
         <div class="text-cyan-500 dark:text-cyan-400 truncate">{{ adjacent.next.title }}</div>
       </NuxtLink>
     </nav>
+
+    <aside
+      v-if="post.authorBio"
+      class="mt-10 border border-zinc-300 dark:border-zinc-800 rounded p-4"
+      aria-label="about the author"
+    >
+      <div class="text-xs text-zinc-500 mb-1">about the author</div>
+      <NuxtLink
+        :to="`/u/${post.author}`"
+        class="text-cyan-500 dark:text-cyan-400 hover:underline"
+      >{{ post.author }}</NuxtLink>
+      <p class="text-sm text-zinc-700 dark:text-zinc-300 mt-1 whitespace-pre-wrap">{{ post.authorBio }}</p>
+    </aside>
 
     <section id="comments" class="mt-12 scroll-mt-16">
       <h2 class="text-sm text-zinc-500 mb-2">// comments</h2>
