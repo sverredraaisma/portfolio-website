@@ -63,7 +63,11 @@ const toast = useToast()
 const isBookmarked = ref(false)
 const bookmarkBusy = ref(false)
 async function refreshBookmarkState() {
-  if (!auth.isAuthenticated || !post.value) return
+  if (!post.value) return
+  // Reset on sign-out so the previous user's star doesn't bleed into
+  // the anonymous view (the button is hidden, but the ref still drives
+  // any subsequent re-auth).
+  if (!auth.isAuthenticated) { isBookmarked.value = false; return }
   try {
     const res = await rpc.call<{ isBookmarked: boolean }>('bookmarks.isBookmarked', { postId: post.value.id })
     isBookmarked.value = res.isBookmarked
@@ -84,7 +88,17 @@ async function toggleBookmark() {
     bookmarkBusy.value = false
   }
 }
-watch(() => post.value?.id, refreshBookmarkState, { immediate: true })
+// Refetch when the post changes (route param navigation) AND when auth
+// flips — without the second source, signing in mid-page leaves the
+// star button at its default ☆ state until the user navigates away.
+// On logout the auth-store check inside refreshBookmarkState
+// short-circuits, leaving isBookmarked at its last-known value, which
+// is harmless because the v-if hides the button for anonymous viewers.
+watch(
+  [() => post.value?.id, () => auth.isAuthenticated],
+  refreshBookmarkState,
+  { immediate: true }
+)
 </script>
 
 <template>
