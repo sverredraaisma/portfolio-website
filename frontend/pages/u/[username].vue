@@ -46,8 +46,18 @@ const { data: profile, pending } = await useAsyncData<Profile | null>(
   { watch: [username] }
 )
 
+// On SSR, surface the 404 status so search engines + monitoring don't index
+// a missing username as a 200 OK empty page. setResponseStatus is a no-op
+// in the browser, so no client-side guard needed.
+if (!profile.value) {
+  const event = useRequestEvent()
+  if (event) setResponseStatus(event, 404)
+}
+
 useHead({
-  title: profile.value ? `${profile.value.username} — profile` : 'profile'
+  title: profile.value ? `${profile.value.username} — profile` : 'profile not found',
+  // No-index the not-found state too — the page is a real route, just empty.
+  meta: profile.value ? [] : [{ name: 'robots', content: 'noindex' }]
 })
 
 // One-line preview of a comment body for the strip on a profile. We don't
