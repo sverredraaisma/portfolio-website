@@ -10,9 +10,14 @@ const done = ref(false)
 const loading = ref(false)
 const rpc = useRpc()
 
+// Mirror the server-side username rules so the user finds out about a bad
+// shape before they hit submit. Source of truth is UsernameNormalizer in
+// the backend; this is the same regex.
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9_-]{1,30}[a-z0-9])?$/
+const usernameOk = computed(() => USERNAME_RE.test(username.value.trim()))
 const passwordOk = computed(() => password.value.length >= 8)
 const formOk = computed(() =>
-  username.value.trim().length >= 1 &&
+  usernameOk.value &&
   email.value.includes('@') &&
   passwordOk.value
 )
@@ -45,7 +50,12 @@ async function submit() {
 
     <form v-else @submit.prevent="submit" class="space-y-4">
       <label class="block">
-        <span class="block text-xs text-zinc-500 mb-1">username</span>
+        <span class="block text-xs text-zinc-500 mb-1">
+          username
+          <span v-if="username && !usernameOk" class="text-yellow-600 dark:text-yellow-400 ml-2">
+            (lowercase a-z, 0-9, '_' and '-'; 3–32 chars; start and end alphanumeric)
+          </span>
+        </span>
         <input
           v-model="username"
           autofocus

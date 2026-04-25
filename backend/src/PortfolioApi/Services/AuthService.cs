@@ -48,6 +48,11 @@ public class AuthService : IAuthService
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
+        // Strict-form normalisation: rejects mixed case, bad chars, length
+        // out of range. Throws a user-safe InvalidOperationException that
+        // the router maps to a 400.
+        username = UsernameNormalizer.NormaliseForRegister(username);
+
         // Username clashes are exposed (usernames are public anyway).
         // Email clashes are NOT exposed — that would let an attacker enumerate
         // which addresses have accounts. We rely on the unique-index +
@@ -91,25 +96,35 @@ public class AuthService : IAuthService
     {
         RejectIfLooksLikeRawPassword(clientHashHex);
 
-        // Per-username throttle. Throws AuthFailedException with the same code
-        // the router maps to 401 — same shape as bad creds, so an attacker
-        // can't tell from the outside whether they're locked out vs wrong.
-        _throttle.EnsureNotLocked(username);
+        // Permissive normalisation: typing "ALICE" finds "alice". A value
+        // that can't be a valid username at all (whitespace, weird chars)
+        // short-circuits here — but we still run the dummy hash below so
+        // the timing matches the unknown-user path.
+        var key = UsernameNormalizer.NormaliseForLookup(username) ?? string.Empty;
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+        // Per-username throttle keyed off the canonical form so "Alice" and
+        // "alice" share the same lockout counter. Throws AuthFailedException
+        // with the same code the router maps to 401 — same shape as bad
+        // creds, so an attacker can't tell from the outside whether they're
+        // locked out vs wrong.
+        _throttle.EnsureNotLocked(key);
+
+        var user = key.Length == 0
+            ? null
+            : await _db.Users.FirstOrDefaultAsync(u => u.Username == key, cancellationToken);
         if (user is null)
         {
             // Run a dummy hash so the response time matches the success path —
             // mitigates username-enumeration via timing.
             _ = Argon2(HexToBytes(clientHashHex), new byte[SaltSize]);
-            _throttle.RecordFailure(username);
+            _throttle.RecordFailure(key);
             return null;
         }
 
         var attempt = Argon2(HexToBytes(clientHashHex), user.PasswordSalt);
         if (!CryptographicOperations.FixedTimeEquals(attempt, user.PasswordHash))
         {
-            _throttle.RecordFailure(username);
+            _throttle.RecordFailure(key);
             return null;
         }
 
@@ -584,6 +599,11 @@ public class AuthService : IAuthService
     public async Task<bool> SeedAdminIfEmptyAsync(string username, string email, CancellationToken cancellationToken = default)
     {
         if (await _db.Users.AnyAsync(cancellationToken)) return false;
+
+        // Apply the same shape rules as user-driven registration so the seed
+        // can't quietly bypass them — e.g. a config like "Admin" would land
+        // in the DB mixed-case and then never log in via the normalised path.
+        username = UsernameNormalizer.NormaliseForRegister(username);
 
         // Mint a high-entropy password we will never log, return, or persist —
         // the only path back into this account is the password-reset flow,

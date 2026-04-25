@@ -96,10 +96,13 @@ public sealed class PasskeyService : IPasskeyService
     public async Task<PasskeyAssertionStart> StartAssertionAsync(string? username, CancellationToken cancellationToken = default)
     {
         var allowed = new List<PublicKeyCredentialDescriptor>();
-        if (!string.IsNullOrWhiteSpace(username))
+        // Permissive lookup: lowercases + validates shape so "ALICE" matches
+        // the stored "alice" and obviously-bad input doesn't reach the DB.
+        var key = UsernameNormalizer.NormaliseForLookup(username);
+        if (key is not null)
         {
             allowed = await _db.Passkeys
-                .Where(p => p.User!.Username == username)
+                .Where(p => p.User!.Username == key)
                 .Select(p => new PublicKeyCredentialDescriptor(p.CredentialId))
                 .ToListAsync(cancellationToken);
         }

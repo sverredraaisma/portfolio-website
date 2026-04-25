@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Data;
+using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc.Methods;
 
@@ -51,13 +52,16 @@ public class UserMethods
 
     public async Task<UserProfileDto> GetProfile(GetProfileParams p, RpcContext ctx)
     {
-        var name = (p.Username ?? string.Empty).Trim();
-        if (name.Length == 0) throw new InvalidOperationException("username required");
-        if (name.Length > 64) throw new InvalidOperationException("username too long");
+        // Permissive lookup: /u/Alice or /u/ALICE find the canonical "alice".
+        // A value that can't be a valid username at all (whitespace, bad
+        // chars, wrong length) yields null and we surface a not-found
+        // without bothering the database.
+        var key = UsernameNormalizer.NormaliseForLookup(p.Username)
+            ?? throw new InvalidOperationException("User not found");
 
         var user = await _db.Users
             .AsNoTracking()
-            .Where(u => u.Username == name)
+            .Where(u => u.Username == key)
             .Select(u => new { u.Id, u.Username, u.IsAdmin, u.CreatedAt })
             .FirstOrDefaultAsync(ctx.CancellationToken)
             ?? throw new InvalidOperationException("User not found");

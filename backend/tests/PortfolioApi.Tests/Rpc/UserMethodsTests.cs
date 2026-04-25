@@ -64,33 +64,35 @@ public class UserMethodsTests
     }
 
     [Fact]
-    public async Task Username_match_is_case_sensitive_to_match_the_DB_uniqueness_constraint()
+    public async Task Lookup_is_case_insensitive_so_a_capitalised_URL_finds_the_canonical_user()
     {
-        // The DB unique index is case-sensitive; the lookup must agree, otherwise
-        // a user named "Alice" would shadow "alice" on /u/alice.
+        // Stored usernames are guaranteed lowercase by registration; the
+        // public lookup is permissive so /u/Alice and /u/ALICE both work.
         var (sut, _, _) = Setup();
 
-        var act = async () => await sut.GetProfile(
+        var dto = await sut.GetProfile(
             new GetProfileParams { Username = "ALICE" },
             TestRpcContext.Anonymous());
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("User not found");
+        dto.Username.Should().Be("alice");
     }
 
     [Fact]
-    public async Task Empty_or_oversized_username_is_rejected_before_the_DB_lookup()
+    public async Task Empty_or_malformed_username_surfaces_as_user_not_found()
     {
+        // The lookup normaliser short-circuits anything that couldn't be a
+        // valid stored username — empty, too long, or with bad characters
+        // — and the response is the same not-found shape so callers can't
+        // distinguish "no such user" from "your input was nonsense".
         var (sut, _, _) = Setup();
 
-        var blank = async () => await sut.GetProfile(
-            new GetProfileParams { Username = "   " },
-            TestRpcContext.Anonymous());
-        await blank.Should().ThrowAsync<InvalidOperationException>().WithMessage("username required");
-
-        var huge = async () => await sut.GetProfile(
-            new GetProfileParams { Username = new string('a', 65) },
-            TestRpcContext.Anonymous());
-        await huge.Should().ThrowAsync<InvalidOperationException>().WithMessage("username too long");
+        foreach (var bad in new[] { "   ", new string('a', 65), "has spaces", "_leading", "trailing-" })
+        {
+            var act = async () => await sut.GetProfile(
+                new GetProfileParams { Username = bad },
+                TestRpcContext.Anonymous());
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("User not found");
+        }
     }
 
     [Fact]
