@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SigningMethods>();
         services.AddScoped<AccountMethods>();
         services.AddScoped<LocationMethods>();
+        services.AddScoped<UserMethods>();
 
         return services;
     }

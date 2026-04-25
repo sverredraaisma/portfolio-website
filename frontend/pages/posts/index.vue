@@ -125,8 +125,11 @@ watch(() => route.query.tag, (v) => {
       <li v-for="p in posts" :key="p.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-4 hover:border-cyan-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
           <div class="text-lg">{{ p.title }}</div>
-          <div class="text-xs text-zinc-500">{{ formatTime(p.createdAt) }} · {{ p.author }}</div>
         </NuxtLink>
+        <div class="text-xs text-zinc-500 mt-1">
+          {{ formatTime(p.createdAt) }} ·
+          <NuxtLink :to="`/u/${p.author}`" class="hover:underline text-zinc-500 hover:text-cyan-500">{{ p.author }}</NuxtLink>
+        </div>
         <div v-if="p.tags?.length" class="mt-2 flex flex-wrap gap-1">
           <NuxtLink
             v-for="t in p.tags"

@@ -43,7 +43,9 @@ useSeoMeta({
       <div>
         <h1 class="text-3xl text-cyan-400">{{ post.title }}</h1>
         <div class="text-xs text-zinc-500 mt-1">
-          {{ formatTime(post.createdAt) }} · {{ post.author }} · ~{{ readMinutes }} min read
+          {{ formatTime(post.createdAt) }} ·
+          <NuxtLink :to="`/u/${post.author}`" class="hover:underline text-zinc-500 hover:text-cyan-500">{{ post.author }}</NuxtLink>
+          · ~{{ readMinutes }} min read
         </div>
       </div>
       <NuxtLink

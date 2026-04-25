@@ -151,7 +151,14 @@ const promptTail = computed(() => (isAdmin.value ? '#' : '$'))
         <div class="flex-1">
           <span class="text-cyan-600">[{{ formatTime(c.createdAt) }}]</span>
           <span :class="c.authorIsAdmin ? 'text-red-400' : 'text-cyan-600'">
-            {{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio
+            <template v-if="c.author === 'anonymous'">
+              {{ c.author }}@portfolio
+            </template>
+            <NuxtLink
+              v-else
+              :to="`/u/${c.author}`"
+              class="hover:underline focus:underline focus:outline-none"
+            >{{ c.authorIsAdmin ? `root(${c.author})` : c.author }}@portfolio</NuxtLink>
           </span>
           <span class="text-zinc-500"> &gt; </span>
 
