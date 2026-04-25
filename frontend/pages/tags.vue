@@ -55,6 +55,11 @@ function tierFor(count: number): string {
           class="text-xs text-zinc-500 hover:text-cyan-400"
           :title="`Subscribe to #${t.tag} (RSS)`"
         >rss</a>
+        <a
+          :href="`/atom/${t.tag}.xml`"
+          class="text-xs text-zinc-500 hover:text-cyan-400"
+          :title="`Subscribe to #${t.tag} (Atom)`"
+        >atom</a>
       </span>
     </div>
   </section>

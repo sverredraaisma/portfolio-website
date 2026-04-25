@@ -74,6 +74,26 @@ public static class RssEndpoint
             await WriteAtomResponse(http, body);
         });
 
+        // Per-tag Atom — same shape rules as the RSS variant. A
+        // valid-but-empty tag returns a valid empty feed (200) so a
+        // subscription doesn't break when the last post on a tag goes
+        // away.
+        app.MapGet("/atom/{tag}.xml", async (string tag, HttpContext http, AppDbContext db) =>
+        {
+            if (!TagPattern.IsMatch(tag))
+            {
+                http.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            var origin = OriginFor(http);
+            var posts = await PostsQuery(db, http, tag: tag);
+            var body = RenderAtom(posts, origin,
+                feedTitle: $"sverre.dev — #{tag}",
+                feedSelf: $"{origin}/atom/{Uri.EscapeDataString(tag)}.xml",
+                alternateHtml: $"{origin}/posts?tag={Uri.EscapeDataString(tag)}");
+            await WriteAtomResponse(http, body);
+        });
+
         app.MapGet("/sitemap.xml", async (HttpContext http, AppDbContext db) =>
         {
             var origin = OriginFor(http);

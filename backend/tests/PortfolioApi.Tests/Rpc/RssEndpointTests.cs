@@ -207,6 +207,21 @@ public class RssEndpointTests : IAsyncLifetime
         feedId.Should().Be(selfHref);
     }
 
+    [Theory]
+    [InlineData("/atom/UPPER.xml")]
+    [InlineData("/atom/-leading.xml")]
+    [InlineData("/atom/trailing-.xml")]
+    [InlineData("/atom/has_underscore.xml")]
+    [InlineData("/atom/way-too-long-tag-that-exceeds-the-thirty-two-char-cap.xml")]
+    public async Task GET_atom_per_tag_returns_404_for_a_malformed_tag(string url)
+    {
+        // Same shape rule as the RSS variant — fail closed on bad input
+        // rather than running an arbitrary string through the filter.
+        var response = await _client.GetAsync(url);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
     [Fact]
     public async Task GET_atom_xml_carries_the_same_short_cache_header_as_rss()
     {

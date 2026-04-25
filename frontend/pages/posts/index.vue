@@ -106,15 +106,19 @@ watch(() => route.query.tag, (v) => {
 import { useCanonical } from '~/composables/useCanonical'
 const canonicalUrl = useCanonical(() => tag.value ? `/posts?tag=${tag.value}` : '/posts')
 
-// Feed-reader auto-discovery: when filtering by tag, expose the per-tag
-// RSS link so a "subscribe" button in the user's reader points at the
-// narrow feed instead of the whole site. The site-wide alternate stays
-// in nuxt.config.ts.
+// Feed-reader auto-discovery: when filtering by tag, expose both
+// per-tag feeds so a "subscribe" button in the user's reader points
+// at the narrow feed instead of the whole site. Some readers prefer
+// Atom, others RSS — advertising both lets either pick. The
+// site-wide alternates stay in nuxt.config.ts.
 useHead({
   link: () => [
     ...(canonicalUrl.value ? [{ rel: 'canonical', href: canonicalUrl.value }] : []),
     ...(tag.value
-      ? [{ rel: 'alternate', type: 'application/rss+xml', title: `sverre.dev — #${tag.value}`, href: `/rss/${tag.value}.xml` }]
+      ? [
+          { rel: 'alternate', type: 'application/rss+xml',  title: `sverre.dev — #${tag.value} (RSS)`,  href: `/rss/${tag.value}.xml` },
+          { rel: 'alternate', type: 'application/atom+xml', title: `sverre.dev — #${tag.value} (Atom)`, href: `/atom/${tag.value}.xml` }
+        ]
       : [])
   ]
 })
