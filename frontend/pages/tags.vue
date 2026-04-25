@@ -8,7 +8,12 @@ const { data: tags } = await useAsyncData<TagCount[]>(
   () => rpc.call<TagCount[]>('posts.tags')
 )
 
-useHead({ title: 'tags' })
+import { useCanonical } from '~/composables/useCanonical'
+const canonicalUrl = useCanonical('/tags')
+useHead({
+  title: 'tags',
+  link: () => canonicalUrl.value ? [{ rel: 'canonical', href: canonicalUrl.value }] : []
+})
 
 // Map a tag's count to a font-size step so the cloud reads as a cloud and
 // not a uniform list. Steps are coarse on purpose — proportional sizing

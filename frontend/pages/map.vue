@@ -35,6 +35,12 @@ useSeoMeta({
   title: 'Map',
   description: 'Where on Earth the people of sverre.dev are right now.'
 })
+
+import { useCanonical } from '~/composables/useCanonical'
+const canonicalUrl = useCanonical('/map')
+useHead({
+  link: () => canonicalUrl.value ? [{ rel: 'canonical', href: canonicalUrl.value }] : []
+})
 </script>
 
 <template>
