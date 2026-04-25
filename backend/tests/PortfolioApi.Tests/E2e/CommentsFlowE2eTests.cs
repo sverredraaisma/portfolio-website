@@ -141,11 +141,19 @@ public class CommentsFlowE2eTests : IClassFixture<AppFactory>, IAsyncLifetime
         var created = await Rpc("comments.create",
             new { postId = _postId, body = "v1" }, _aliceToken);
         var id = created.GetProperty("result").GetProperty("id").GetString();
+        // The freshly-created comment isn't an edit yet — wire payload
+        // carries updatedAt: null so the frontend doesn't show (edited).
+        created.GetProperty("result").GetProperty("updatedAt").ValueKind
+            .Should().Be(JsonValueKind.Null);
 
         var updated = await Rpc("comments.update",
             new { id, body = "v2" }, _aliceToken);
 
-        updated.GetProperty("result").GetProperty("body").GetString().Should().Be("v2");
+        var result = updated.GetProperty("result");
+        result.GetProperty("body").GetString().Should().Be("v2");
+        // After a real edit the wire shape carries the timestamp the
+        // frontend reads to render the (edited) marker + tooltip.
+        result.GetProperty("updatedAt").ValueKind.Should().Be(JsonValueKind.String);
     }
 
     [Fact]
