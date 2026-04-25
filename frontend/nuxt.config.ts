@@ -24,8 +24,11 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' }
       ],
       link: [
-        // Feed readers auto-discover /rss.xml from this <link>.
-        { rel: 'alternate', type: 'application/rss+xml', title: 'sverre.dev posts', href: '/rss.xml' }
+        // Feed readers auto-discover /rss.xml + /atom.xml from these <link>s.
+        // Some readers prefer Atom for its stricter <updated>/<id> semantics
+        // and will pick it over RSS when both are advertised.
+        { rel: 'alternate', type: 'application/rss+xml',  title: 'sverre.dev posts (RSS)',  href: '/rss.xml' },
+        { rel: 'alternate', type: 'application/atom+xml', title: 'sverre.dev posts (Atom)', href: '/atom.xml' }
       ],
       script: [
         // Pre-hydration theme set: reads localStorage *before* Vue runs so a

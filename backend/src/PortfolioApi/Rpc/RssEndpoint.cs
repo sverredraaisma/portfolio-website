@@ -60,6 +60,20 @@ public static class RssEndpoint
             await WriteFeedResponse(http, body);
         });
 
+        // Atom 1.0 mirror of /rss.xml. Some readers + integrations
+        // (Inoreader, Feedly's "atom-only" niche) prefer Atom for its
+        // stricter <updated> + <id> semantics; serving both is cheap.
+        app.MapGet("/atom.xml", async (HttpContext http, AppDbContext db) =>
+        {
+            var origin = OriginFor(http);
+            var posts = await PostsQuery(db, http, tag: null);
+            var body = RenderAtom(posts, origin,
+                feedTitle: "sverre.dev",
+                feedSelf: $"{origin}/atom.xml",
+                alternateHtml: $"{origin}/posts");
+            await WriteAtomResponse(http, body);
+        });
+
         app.MapGet("/sitemap.xml", async (HttpContext http, AppDbContext db) =>
         {
             var origin = http.Request.Scheme + "://" + http.Request.Host;
@@ -143,7 +157,7 @@ public static class RssEndpoint
     private static string OriginFor(HttpContext http) =>
         http.Request.Scheme + "://" + http.Request.Host;
 
-    private record FeedItem(string Title, string Slug, DateTime CreatedAt, string Author, JsonDocument Blocks);
+    private record FeedItem(Guid Id, string Title, string Slug, DateTime CreatedAt, DateTime UpdatedAt, string Author, JsonDocument Blocks);
 
     private static async Task<IReadOnlyList<FeedItem>> PostsQuery(AppDbContext db, HttpContext http, string? tag)
     {
@@ -152,7 +166,7 @@ public static class RssEndpoint
         return await q
             .OrderByDescending(p => p.CreatedAt)
             .Take(MaxItems)
-            .Select(p => new FeedItem(p.Title, p.Slug, p.CreatedAt, p.Author!.Username, p.Blocks))
+            .Select(p => new FeedItem(p.Id, p.Title, p.Slug, p.CreatedAt, p.UpdatedAt, p.Author!.Username, p.Blocks))
             .ToListAsync(http.RequestAborted);
     }
 
@@ -205,6 +219,81 @@ public static class RssEndpoint
         http.Response.ContentType = "application/rss+xml; charset=utf-8";
         // Short cache so feed readers get new posts within an hour without
         // hammering the database.
+        http.Response.Headers["Cache-Control"] = "public, max-age=3600";
+        await http.Response.WriteAsync(body, http.RequestAborted);
+    }
+
+    private static string RenderAtom(IReadOnlyList<FeedItem> posts, string origin, string feedTitle, string feedSelf, string alternateHtml)
+    {
+        var xml = new StringBuilder();
+        using var writer = XmlWriter.Create(xml, new XmlWriterSettings
+        {
+            Indent = false,
+            Encoding = new UTF8Encoding(false),
+            OmitXmlDeclaration = false,
+            Async = false
+        });
+
+        // Feed-level <updated> uses the most recent post's UpdatedAt so a
+        // conditional reader can short-circuit when nothing has changed.
+        // Defaults to "now" on an empty archive — the spec requires a value.
+        var feedUpdated = posts.Count > 0 ? posts.Max(p => p.UpdatedAt) : DateTime.UtcNow;
+
+        writer.WriteStartElement("feed", "http://www.w3.org/2005/Atom");
+        writer.WriteElementString("title", feedTitle);
+        writer.WriteElementString("id", alternateHtml);
+        writer.WriteElementString("updated", feedUpdated.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+
+        writer.WriteStartElement("link");
+        writer.WriteAttributeString("rel", "self");
+        writer.WriteAttributeString("type", "application/atom+xml");
+        writer.WriteAttributeString("href", feedSelf);
+        writer.WriteEndElement();
+
+        writer.WriteStartElement("link");
+        writer.WriteAttributeString("rel", "alternate");
+        writer.WriteAttributeString("type", "text/html");
+        writer.WriteAttributeString("href", alternateHtml);
+        writer.WriteEndElement();
+
+        foreach (var p in posts)
+        {
+            writer.WriteStartElement("entry");
+            writer.WriteElementString("title", p.Title);
+            // urn:uuid: id is stable across slug rewrites (slug can move,
+            // Guid can't). Atom spec just wants any stable IRI per entry.
+            writer.WriteElementString("id", $"urn:uuid:{p.Id}");
+            writer.WriteElementString("published", p.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+            writer.WriteElementString("updated", p.UpdatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+            writer.WriteStartElement("link");
+            writer.WriteAttributeString("rel", "alternate");
+            writer.WriteAttributeString("type", "text/html");
+            writer.WriteAttributeString("href", $"{origin}/posts/{p.Slug}");
+            writer.WriteEndElement();
+            writer.WriteStartElement("author");
+            writer.WriteElementString("name", p.Author);
+            writer.WriteEndElement();
+            var preview = ExtractDescription(p.Blocks);
+            if (!string.IsNullOrEmpty(preview))
+            {
+                // type="text" (not html): the preview is plain markdown
+                // source clipped + whitespace-collapsed, not HTML.
+                writer.WriteStartElement("summary");
+                writer.WriteAttributeString("type", "text");
+                writer.WriteString(preview);
+                writer.WriteEndElement();
+            }
+            writer.WriteEndElement(); // entry
+        }
+
+        writer.WriteEndElement(); // feed
+        writer.Flush();
+        return xml.ToString();
+    }
+
+    private static async Task WriteAtomResponse(HttpContext http, string body)
+    {
+        http.Response.ContentType = "application/atom+xml; charset=utf-8";
         http.Response.Headers["Cache-Control"] = "public, max-age=3600";
         await http.Response.WriteAsync(body, http.RequestAborted);
     }

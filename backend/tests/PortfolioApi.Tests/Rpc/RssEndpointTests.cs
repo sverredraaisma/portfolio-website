@@ -136,6 +136,61 @@ public class RssEndpointTests : IAsyncLifetime
     [Fact(Skip = "EF can't translate Tags.Contains over the SQLite value-converted CSV column.")]
     public Task GET_rss_per_tag_carries_the_same_short_cache_header_as_the_main_feed() => Task.CompletedTask;
 
+    // ---- Atom feed --------------------------------------------------------
+
+    [Fact]
+    public async Task GET_atom_xml_returns_application_atom_xml_with_only_published_posts()
+    {
+        var response = await _client.GetAsync("/atom.xml");
+
+        response.EnsureSuccessStatusCode();
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/atom+xml");
+
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        var entries = doc.Descendants(atom + "entry").ToList();
+
+        entries.Should().ContainSingle(e => e.Element(atom + "title")!.Value == "Live Post");
+        entries.Should().NotContain(e => e.Element(atom + "title")!.Value == "Draft",
+            "drafts must not appear in the public feed");
+    }
+
+    [Fact]
+    public async Task GET_atom_xml_uses_a_stable_urn_uuid_id_so_slug_renames_dont_break_subscribers()
+    {
+        // Atom <id> is a permanent identifier — if it changed when a slug
+        // changed, every reader would re-flag the post as new. urn:uuid:
+        // form ties it to the immutable Post.Id instead.
+        var response = await _client.GetAsync("/atom.xml");
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+
+        var ids = doc.Descendants(atom + "entry").Select(e => e.Element(atom + "id")!.Value).ToList();
+        ids.Should().NotBeEmpty();
+        ids.Should().AllSatisfy(id => id.Should().StartWith("urn:uuid:"));
+    }
+
+    [Fact]
+    public async Task GET_atom_xml_advertises_a_self_link_so_aggregators_can_re_subscribe_after_a_redirect()
+    {
+        var response = await _client.GetAsync("/atom.xml");
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+
+        var selfLink = doc.Root!.Elements(atom + "link")
+            .FirstOrDefault(l => (string?)l.Attribute("rel") == "self");
+        selfLink.Should().NotBeNull();
+        selfLink!.Attribute("href")!.Value.Should().EndWith("/atom.xml");
+    }
+
+    [Fact]
+    public async Task GET_atom_xml_carries_the_same_short_cache_header_as_rss()
+    {
+        var response = await _client.GetAsync("/atom.xml");
+
+        response.Headers.CacheControl!.MaxAge.Should().Be(TimeSpan.FromHours(1));
+    }
+
     [Fact]
     public async Task GET_rss_xml_includes_an_item_description_pulled_from_the_first_text_block()
     {
