@@ -77,7 +77,7 @@ public class RpcRouter
         Register("posts.list", RpcHandlers.Typed<PostListParams, PaginatedResult<PostSummary>>(posts.List));
         Register("posts.get", RpcHandlers.Typed<GetPostParams, PostDetail>(posts.Get));
         Register("posts.create", RpcHandlers.Typed<CreatePostParams, CreatePostResult>(posts.Create));
-        Register("posts.update", RpcHandlers.Typed<UpdatePostParams, OkResult>(posts.Update));
+        Register("posts.update", RpcHandlers.Typed<UpdatePostParams, UpdatePostResult>(posts.Update));
         Register("posts.delete", RpcHandlers.Typed<DeletePostParams, OkResult>(posts.Delete));
         Register("posts.uploadImage", RpcHandlers.Typed<UploadImageParams, ImageUploadResult>(posts.UploadImage));
         Register("posts.tags", RpcHandlers.Typed<IReadOnlyList<TagCount>>(posts.Tags));

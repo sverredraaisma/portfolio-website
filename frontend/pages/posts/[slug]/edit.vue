@@ -62,7 +62,10 @@ async function save(nextPublished?: boolean) {
   error.value = ''
   const target = nextPublished ?? published.value
   try {
-    await rpc.call<void>('posts.update', {
+    // Server returns the canonical (NormaliseSlug'd) slug — typing
+    // "Hello World" on the slug input would otherwise navigate to
+    // /posts/Hello World (404) instead of /posts/hello-world.
+    const res = await rpc.call<{ id: string; slug: string }>('posts.update', {
       id: id.value,
       title: title.value,
       slug: slug.value,
@@ -72,12 +75,12 @@ async function save(nextPublished?: boolean) {
     })
     const wasPublished = published.value
     published.value = target
+    slug.value = res.slug
     // Phrase the toast around the transition rather than the final state so
     // "save" on a draft and "publish" on a draft don't both say the same thing.
     if (target !== wasPublished) toast.success(target ? 'Post published.' : 'Post unpublished.')
     else toast.success('Saved.')
-    // Navigate to the (possibly-renamed) slug.
-    router.push(target ? `/posts/${slug.value}` : `/admin/posts`)
+    router.push(target ? `/posts/${res.slug}` : `/admin/posts`)
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {

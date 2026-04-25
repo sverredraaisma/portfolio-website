@@ -207,6 +207,23 @@ public class PostMethodsTests
         stored.Tags.Should().BeEquivalentTo(new[] { "rust" }, "tags untouched when not supplied");
     }
 
+    [Fact]
+    public async Task Update_returns_the_normalised_slug_so_the_editor_navigates_to_the_right_URL()
+    {
+        // Without this, an admin typing "Hello World" as the new slug
+        // would be redirected to /posts/Hello World (404) — the server
+        // stores "hello-world".
+        var (sut, _, admin, _) = Setup();
+        var created = await sut.Create(new CreatePostParams { Title = "t", Slug = "t", Blocks = Blocks() }, TestRpcContext.Admin(admin.Id));
+
+        var res = await sut.Update(
+            new UpdatePostParams { Id = created.Id, Slug = "Hello World!" },
+            TestRpcContext.Admin(admin.Id));
+
+        res.Slug.Should().Be("hello-world");
+        res.Id.Should().Be(created.Id);
+    }
+
     // ---- Tags aggregate ---------------------------------------------------
 
     [Fact]

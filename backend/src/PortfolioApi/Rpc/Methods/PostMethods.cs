@@ -93,6 +93,11 @@ public sealed record PostDetail(
 
 public sealed record CreatePostResult(Guid Id, string Slug);
 
+/// Returned by posts.update with the post-normalisation canonical slug
+/// so the editor can navigate to the right URL without re-running
+/// NormaliseSlug client-side.
+public sealed record UpdatePostResult(Guid Id, string Slug);
+
 public sealed record ImageUploadResult(string Url);
 
 public class PostMethods
@@ -303,7 +308,12 @@ public class PostMethods
         return new CreatePostResult(post.Id, post.Slug);
     }
 
-    public async Task<OkResult> Update(UpdatePostParams p, RpcContext ctx)
+    /// Returns the post-update slug + id (canonical form after
+    /// NormaliseSlug). The frontend uses this to navigate to the
+    /// correct URL without having to mirror the slug-normalisation
+    /// rules — typing "Hello World" used to send the user to
+    /// /posts/Hello World (404) instead of /posts/hello-world.
+    public async Task<UpdatePostResult> Update(UpdatePostParams p, RpcContext ctx)
     {
         var userId = ctx.RequireAdmin();
 
@@ -326,7 +336,7 @@ public class PostMethods
         post.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ctx.CancellationToken);
-        return new OkResult();
+        return new UpdatePostResult(post.Id, post.Slug);
     }
 
     public async Task<OkResult> Delete(DeletePostParams p, RpcContext ctx)
