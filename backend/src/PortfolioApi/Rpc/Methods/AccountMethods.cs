@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using PortfolioApi.Data;
 using PortfolioApi.Services;
 
 namespace PortfolioApi.Rpc.Methods;
@@ -11,11 +13,21 @@ public sealed record DeleteAccountParams
     public string CommentStrategy { get; init; } = "anonymise";
 }
 
+public sealed record SetNotifyOnCommentParams
+{
+    public required bool Enabled { get; init; }
+}
+
 public class AccountMethods
 {
     private readonly IAccountService _accounts;
+    private readonly AppDbContext _db;
 
-    public AccountMethods(IAccountService accounts) => _accounts = accounts;
+    public AccountMethods(IAccountService accounts, AppDbContext db)
+    {
+        _accounts = accounts;
+        _db = db;
+    }
 
     /// AVG art. 15 / 20: data subject access + portability. Returns
     /// everything the service knows about the caller's account.
@@ -32,6 +44,19 @@ public class AccountMethods
         var userId = ctx.RequireUserId();
         var strategy = ParseStrategy(p.CommentStrategy);
         await _accounts.DeleteAsync(userId, strategy, ctx.CancellationToken);
+        return new OkResult();
+    }
+
+    /// Toggle the "email me on a new comment" preference. Direct UPDATE
+    /// instead of load-mutate-save so concurrent toggles don't race the
+    /// EF change-tracker.
+    public async Task<OkResult> SetNotifyOnComment(SetNotifyOnCommentParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var rows = await _db.Users
+            .Where(u => u.Id == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.NotifyOnComment, p.Enabled), ctx.CancellationToken);
+        if (rows == 0) throw new AuthFailedException("Unknown user");
         return new OkResult();
     }
 

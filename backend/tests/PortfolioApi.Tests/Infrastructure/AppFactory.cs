@@ -119,11 +119,14 @@ public sealed class AppFactory : WebApplicationFactory<Program>
         public List<(string To, string Token)> Resets { get; } = new();
         public List<(string To, string Token)> EmailChanges { get; } = new();
         public List<(string To, string Action)> Alerts { get; } = new();
+        public List<(string To, string PostSlug, string CommenterUsername)> CommentNotifications { get; } = new();
 
         public Task SendVerificationAsync(string to, string t) { Verifications.Add((to, t)); return Task.CompletedTask; }
         public Task SendPasswordResetAsync(string to, string t) { Resets.Add((to, t)); return Task.CompletedTask; }
         public Task SendEmailChangeAsync(string to, string t)   { EmailChanges.Add((to, t)); return Task.CompletedTask; }
         public Task SendSecurityAlertAsync(string to, string label, string? note = null)
         { Alerts.Add((to, label)); return Task.CompletedTask; }
+        public Task SendCommentNotificationAsync(string to, string postTitle, string postSlug, Guid commentId, string commenter, string body)
+        { CommentNotifications.Add((to, postSlug, commenter)); return Task.CompletedTask; }
     }
 }

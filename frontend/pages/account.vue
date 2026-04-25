@@ -25,6 +25,7 @@ type AccountExport = {
   totpEnabled: boolean
   recoveryCodesRemaining: number
   createdAt: string
+  notifyOnComment: boolean
   posts: Array<{ id: string; title: string; slug: string; createdAt: string; updatedAt: string; published: boolean }>
   comments: Array<{ id: string; postId: string; body: string; createdAt: string }>
   refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>
@@ -77,6 +78,22 @@ const revokeMessage = ref('')
 const newEmail = ref('')
 const requestingEmail = ref(false)
 const emailMessage = ref('')
+
+// Notification preferences panel state
+const togglingNotify = ref(false)
+async function toggleNotifyOnComment(next: boolean) {
+  if (!data.value) return
+  togglingNotify.value = true
+  try {
+    await rpc.call<void>('account.setNotifyOnComment', { enabled: next })
+    data.value = { ...data.value, notifyOnComment: next }
+    toast.info(next ? 'Comment emails on.' : 'Comment emails off.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    togglingNotify.value = false
+  }
+}
 
 // Location-sharing panel state
 type SharedLocation = {
@@ -538,6 +555,25 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ notifications</h2>
+        <label class="flex items-start gap-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            :checked="data.notifyOnComment"
+            :disabled="togglingNotify"
+            @change="toggleNotifyOnComment(($event.target as HTMLInputElement).checked)"
+            class="mt-1"
+          />
+          <span>
+            Email me when someone comments on a post I authored.
+            <span v-if="!data.emailVerified" class="block text-xs text-yellow-500 mt-1">
+              Verify your email first — we won't send to an unverified address.
+            </span>
+          </span>
+        </label>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ share location</h2>

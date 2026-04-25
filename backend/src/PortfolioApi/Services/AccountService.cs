@@ -79,6 +79,7 @@ public class AccountService : IAccountService
             user.TotpEnabledAt is not null,
             recoveryCodesRemaining,
             user.CreatedAt,
+            user.NotifyOnComment,
             posts,
             comments,
             refreshTokens,

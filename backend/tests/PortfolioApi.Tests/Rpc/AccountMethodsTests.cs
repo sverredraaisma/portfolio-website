@@ -18,7 +18,7 @@ public class AccountMethodsTests
     public async Task Delete_with_anonymise_aliases_passes_through_as_anonymise(string raw)
     {
         var spy = new SpyAccountService();
-        var sut = new AccountMethods(spy);
+        var sut = new AccountMethods(spy, new TestDb().Db);
         var ctx = TestRpcContext.User(Guid.NewGuid());
 
         await sut.Delete(new DeleteAccountParams { CommentStrategy = raw }, ctx);
@@ -30,7 +30,7 @@ public class AccountMethodsTests
     public async Task Delete_with_explicit_delete_strategy_passes_through()
     {
         var spy = new SpyAccountService();
-        var sut = new AccountMethods(spy);
+        var sut = new AccountMethods(spy, new TestDb().Db);
 
         await sut.Delete(new DeleteAccountParams { CommentStrategy = "delete" }, TestRpcContext.User(Guid.NewGuid()));
 
@@ -40,7 +40,7 @@ public class AccountMethodsTests
     [Fact]
     public async Task Delete_rejects_an_unknown_comment_strategy()
     {
-        var sut = new AccountMethods(new SpyAccountService());
+        var sut = new AccountMethods(new SpyAccountService(), new TestDb().Db);
 
         var act = async () => await sut.Delete(
             new DeleteAccountParams { CommentStrategy = "obliterate" },
@@ -52,7 +52,7 @@ public class AccountMethodsTests
     [Fact]
     public async Task Export_requires_a_signed_in_caller()
     {
-        var sut = new AccountMethods(new SpyAccountService());
+        var sut = new AccountMethods(new SpyAccountService(), new TestDb().Db);
 
         var act = async () => await sut.Export(TestRpcContext.Anonymous());
 
@@ -65,7 +65,7 @@ public class AccountMethodsTests
 
         public Task<AccountExport> ExportAsync(Guid userId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new AccountExport(
-                userId, "u", "u@x", true, null, 24, false, false, 0, DateTime.UtcNow,
+                userId, "u", "u@x", true, null, 24, false, false, 0, DateTime.UtcNow, NotifyOnComment: true,
                 Array.Empty<AccountExportPost>(),
                 Array.Empty<AccountExportComment>(),
                 Array.Empty<AccountExportRefreshToken>(),

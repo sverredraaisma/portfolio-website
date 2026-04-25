@@ -56,11 +56,15 @@ public class CommentMethods
 {
     private readonly AppDbContext _db;
     private readonly ICommentThrottle _throttle;
+    private readonly IEmailService _email;
+    private readonly ILogger<CommentMethods> _log;
 
-    public CommentMethods(AppDbContext db, ICommentThrottle throttle)
+    public CommentMethods(AppDbContext db, ICommentThrottle throttle, IEmailService email, ILogger<CommentMethods> log)
     {
         _db = db;
         _throttle = throttle;
+        _email = email;
+        _log = log;
     }
 
     public async Task<PaginatedResult<CommentDto>> List(ListCommentsParams p, RpcContext ctx)
@@ -103,8 +107,19 @@ public class CommentMethods
         if (body.Length == 0) throw new InvalidOperationException("body required");
         if (body.Length > 2000) throw new InvalidOperationException("body too long");
 
-        if (!await _db.Posts.AnyAsync(x => x.Id == p.PostId, ctx.CancellationToken))
-            throw new InvalidOperationException("Post not found");
+        // Pull the post + its author in one go — we need the slug + title
+        // for the notification email and the author's preferences below.
+        var post = await _db.Posts
+            .AsNoTracking()
+            .Where(x => x.Id == p.PostId)
+            .Select(x => new
+            {
+                x.Title,
+                x.Slug,
+                Author = new { x.Author!.Id, x.Author.Email, x.Author.NotifyOnComment, EmailVerified = x.Author.EmailVerifiedAt != null }
+            })
+            .FirstOrDefaultAsync(ctx.CancellationToken)
+            ?? throw new InvalidOperationException("Post not found");
 
         var c = new Comment { PostId = p.PostId, AuthorId = userId, Body = body };
         _db.Comments.Add(c);
@@ -116,6 +131,32 @@ public class CommentMethods
             .Where(u => u.Id == userId)
             .Select(u => new { u.Username, u.IsAdmin })
             .FirstAsync(ctx.CancellationToken);
+
+        // Best-effort comment notification. Skipped when the commenter IS
+        // the post author (no reason to email yourself), when the author
+        // has opted out, or when their email isn't verified (sending to
+        // an unverified address risks spamming a stranger). Send failures
+        // never bubble back to the user — the comment is already saved.
+        if (post.Author.Id != userId
+            && post.Author.NotifyOnComment
+            && post.Author.EmailVerified)
+        {
+            try
+            {
+                await _email.SendCommentNotificationAsync(
+                    post.Author.Email,
+                    post.Title,
+                    post.Slug,
+                    c.Id,
+                    author.Username,
+                    c.Body);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Comment notification email failed for post {PostId}", post.Slug);
+            }
+        }
+
         return new CommentDto(c.Id, c.Body, c.CreatedAt, author.Username, author.IsAdmin);
     }
 

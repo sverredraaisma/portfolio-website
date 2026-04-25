@@ -13,4 +13,16 @@ public interface IEmailService
     /// the email is for awareness so the user can react if it wasn't them.
     /// Send failures are swallowed; this is best-effort signal, not a guard.
     Task SendSecurityAlertAsync(string toEmail, string actionLabel, string? extraNote = null);
+
+    /// Sent to a post author when someone leaves a comment. Best-effort —
+    /// the comment is already persisted before this fires, and we never
+    /// fail the create on a send error. Strings are HTML-escaped at send
+    /// time; pass them in raw.
+    Task SendCommentNotificationAsync(
+        string toEmail,
+        string postTitle,
+        string postSlug,
+        Guid commentId,
+        string commenterUsername,
+        string commentBody);
 }

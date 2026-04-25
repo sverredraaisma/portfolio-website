@@ -15,4 +15,7 @@ public sealed class EmailOptions
     public string VerifyUrlBase { get; set; } = "http://localhost:3000/verify";
     public string ResetUrlBase { get; set; } = "http://localhost:3000/reset-password";
     public string EmailChangeUrlBase { get; set; } = "http://localhost:3000/confirm-email-change";
+    /// Used to build deep links into post pages (e.g. comment notifications).
+    /// Slug + "#c-<id>" anchor is appended at the call site.
+    public string PostUrlBase { get; set; } = "http://localhost:3000/posts";
 }

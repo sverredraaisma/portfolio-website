@@ -31,6 +31,11 @@ public class User
     /// secret (if any) is just a draft and login does not require a code.
     public DateTime? TotpEnabledAt { get; set; }
 
+    /// Email me when someone comments on a post I authored. Default true —
+    /// new accounts opt in on the assumption an author wants to know when
+    /// their work gets a reply. Toggleable from the account page.
+    public bool NotifyOnComment { get; set; } = true;
+
     public List<Post> Posts { get; set; } = new();
     public List<Comment> Comments { get; set; } = new();
 }

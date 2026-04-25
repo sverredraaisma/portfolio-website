@@ -187,5 +187,6 @@ public class AuthServiceTests
         public Task SendPasswordResetAsync(string to, string token) { Resets.Add(to); return Task.CompletedTask; }
         public Task SendEmailChangeAsync(string to, string token) { EmailChanges.Add(to); return Task.CompletedTask; }
         public Task SendSecurityAlertAsync(string to, string label, string? note = null) { Alerts.Add((to, label)); return Task.CompletedTask; }
+        public Task SendCommentNotificationAsync(string to, string postTitle, string postSlug, Guid commentId, string commenter, string body) => Task.CompletedTask;
     }
 }

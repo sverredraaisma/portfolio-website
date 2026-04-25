@@ -37,6 +37,9 @@ public sealed record AccountExport(
     bool TotpEnabled,
     int RecoveryCodesRemaining,
     DateTime CreatedAt,
+    /// Whether the user has the "email me on a new comment" preference on.
+    /// Default true on registration; flipped via account.setNotifyOnComment.
+    bool NotifyOnComment,
     IReadOnlyList<AccountExportPost> Posts,
     IReadOnlyList<AccountExportComment> Comments,
     IReadOnlyList<AccountExportRefreshToken> RefreshTokens,

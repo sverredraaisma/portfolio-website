@@ -69,6 +69,36 @@ public class EmailService : IEmailService
         return SendAsync(toEmail, subject, html);
     }
 
+    public Task SendCommentNotificationAsync(
+        string toEmail,
+        string postTitle,
+        string postSlug,
+        Guid commentId,
+        string commenterUsername,
+        string commentBody)
+    {
+        // The body comes straight from a user — escape it as HTML AND clamp
+        // the length so a 2KB wall doesn't dominate the email.
+        const int previewLen = 280;
+        var clipped = commentBody.Length > previewLen
+            ? commentBody[..(previewLen - 1)] + "…"
+            : commentBody;
+
+        // Anchor the link at the comment so the author lands on the row.
+        var link = $"{_opt.PostUrlBase}/{Uri.EscapeDataString(postSlug)}#c-{commentId}";
+        var safeTitle = HtmlEscape(postTitle);
+        var safeUser = HtmlEscape(commenterUsername);
+        var safeBody = HtmlEscape(clipped).Replace("\n", "<br>");
+        var html = $"""
+            <p><strong>{safeUser}</strong> commented on your post <em>{safeTitle}</em>:</p>
+            <blockquote style="border-left: 3px solid #ccc; padding-left: 10px; color: #555;">{safeBody}</blockquote>
+            <p><a href="{link}">View the comment</a></p>
+            <p style="color: #888; font-size: 12px;">You can turn off these notifications on your account page.</p>
+            """;
+        var subject = "New comment on " + postTitle.Replace('\n', ' ').Replace('\r', ' ');
+        return SendAsync(toEmail, subject, html);
+    }
+
     // Small inline HTML escape — actionLabel and extraNote are server-supplied
     // constants today, but treating them as untrusted means we can't be bitten
     // by a future change that pipes user input in.

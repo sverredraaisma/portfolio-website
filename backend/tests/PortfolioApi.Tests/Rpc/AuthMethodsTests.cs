@@ -153,6 +153,7 @@ public class AuthMethodsTests
         public Task SendPasswordResetAsync(string toEmail, string jwtToken) => Task.CompletedTask;
         public Task SendEmailChangeAsync(string toEmail, string jwtToken) => Task.CompletedTask;
         public Task SendSecurityAlertAsync(string toEmail, string actionLabel, string? extraNote = null) => Task.CompletedTask;
+        public Task SendCommentNotificationAsync(string toEmail, string postTitle, string postSlug, Guid commentId, string commenter, string body) => Task.CompletedTask;
     }
 
     private sealed class NoopPasskeys : IPasskeyService
