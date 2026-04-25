@@ -28,6 +28,11 @@ async function logout() {
   }
   auth.logout()
   closeNav()
+  // Navigate home explicitly. Without this, logging out from an
+  // auth-gated page (e.g. /account) leaves the user on it with stale
+  // data — the auth middleware only fires on navigation, not on
+  // reactive auth-store changes.
+  router.push('/')
 }
 
 const showVerifyBanner = computed(() =>
@@ -45,6 +50,7 @@ const showVerifyBanner = computed(() =>
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-4 text-sm">
         <NuxtLink to="/posts" class="hover:text-cyan-400">posts</NuxtLink>
+        <NuxtLink to="/tags" class="hover:text-cyan-400">tags</NuxtLink>
         <NuxtLink to="/map" class="hover:text-cyan-400">map</NuxtLink>
         <NuxtLink to="/verify-statement" class="hover:text-cyan-400">verify</NuxtLink>
         <NuxtLink to="/privacy" class="hover:text-cyan-400">privacy</NuxtLink>
@@ -95,6 +101,7 @@ const showVerifyBanner = computed(() =>
       class="md:hidden border-b border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 py-3 flex flex-col text-sm divide-y divide-zinc-200 dark:divide-zinc-800"
     >
       <NuxtLink to="/posts" class="py-2 hover:text-cyan-400">posts</NuxtLink>
+      <NuxtLink to="/tags" class="py-2 hover:text-cyan-400">tags</NuxtLink>
       <NuxtLink to="/map" class="py-2 hover:text-cyan-400">map</NuxtLink>
       <NuxtLink to="/verify-statement" class="py-2 hover:text-cyan-400">verify a signature</NuxtLink>
       <NuxtLink to="/privacy" class="py-2 hover:text-cyan-400">privacy</NuxtLink>
