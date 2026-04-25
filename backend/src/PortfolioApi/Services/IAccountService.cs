@@ -13,9 +13,11 @@ public sealed record AccountExportComment(Guid Id, Guid PostId, string Body, Dat
 public sealed record AccountExportPost(Guid Id, string Title, string Slug, DateTime CreatedAt, DateTime UpdatedAt, bool Published);
 public sealed record AccountExportRefreshToken(Guid Id, DateTime CreatedAt, DateTime ExpiresAt, DateTime? RevokedAt);
 public sealed record AccountExportAuditEvent(Guid Id, string Kind, string? Detail, DateTime At);
-/// Echoes the FULL-precision values from the row — the AVG export is meant
-/// to be exhaustive (art. 15: the user gets to see exactly what's stored).
-/// The public list applies rounding; this projection deliberately doesn't.
+/// Echoes exactly what's stored on the row — which since the per-user
+/// precision change is already rounded to the user's chosen tier (the
+/// frontend rounds before transmit, the backend rounds again on store).
+/// PrecisionDecimals lets the export show the user which tier those
+/// coords were trimmed to.
 public sealed record AccountExportLocation(double Latitude, double Longitude, string? Label, string Source, int PrecisionDecimals, DateTime UpdatedAt);
 public sealed record AccountExportBookmark(Guid Id, Guid PostId, string PostTitle, string PostSlug, DateTime SavedAt);
 

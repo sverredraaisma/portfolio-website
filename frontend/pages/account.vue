@@ -206,6 +206,14 @@ async function loadMyLocation() {
   catch { /* anonymous loadExport will surface the auth error elsewhere */ }
 }
 
+// Round to N decimal places using a string round-trip so we don't ship
+// floating-point sub-bit noise to the server (1.1 + 0.2 in IEEE-754 etc).
+// toFixed gives a deterministic string at exactly N decimals; parseFloat
+// then narrows it back to a number for transport.
+function roundCoord(value: number, decimals: number): number {
+  return parseFloat(value.toFixed(decimals))
+}
+
 async function shareBrowserLocation() {
   locationMessage.value = ''
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -217,15 +225,20 @@ async function shareBrowserLocation() {
   // precision than ~110m; otherwise the extra battery and slower fix
   // would be wasted (the rounding throws away the precision anyway).
   const wantsHighAccuracy = sharePrecision.value >= 4
+  const precision = sharePrecision.value
   await new Promise<void>((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
+          // Round client-side BEFORE the RPC call — the user's raw GPS fix
+          // never reaches the server. The backend rounds again on store as
+          // defence in depth, but a server compromise can't recover the
+          // original sub-tier precision once we've thrown it away here.
           await rpc.call<void>('location.shareCoords', {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
+            latitude: roundCoord(pos.coords.latitude, precision),
+            longitude: roundCoord(pos.coords.longitude, precision),
             label: shareLabel.value.trim() || null,
-            precisionDecimals: sharePrecision.value
+            precisionDecimals: precision
           })
           toast.success('Location shared.')
           await loadMyLocation()
@@ -767,9 +780,10 @@ async function deleteAccount() {
         <h2 class="text-lg text-cyan-400">$ share location</h2>
         <p class="text-xs text-zinc-500 max-w-prose">
           Pin yourself on the public <NuxtLink to="/map" class="underline hover:text-cyan-400">/map</NuxtLink>.
-          You pick how rounded your coords are before they reach the wire — pick "exact" for a meet-up
-          where friends need to find you in a specific building, or "city" / "region" for a privacy-
-          forward share. Add a label so others know what the pin is for.
+          You pick how rounded your coords are — pick "exact" for a meet-up where friends need to
+          find you in a specific building, or "city" / "region" for a privacy-forward share. The
+          rounding happens in your browser before the RPC call, so your raw GPS fix never reaches
+          the server. Add a label so others know what the pin is for.
           Opt-in; clear it any time.
         </p>
 

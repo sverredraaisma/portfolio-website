@@ -220,6 +220,59 @@ public class LocationServiceTests
     }
 
     [Fact]
+    public async Task SetCoordsAsync_rounds_stored_coords_to_the_chosen_precision()
+    {
+        // Defence in depth: the frontend rounds before the RPC call, but a
+        // misbehaving client (or a future caller that forgets to) must not
+        // be able to leave finer-than-tier precision in the database.
+        var (sut, test, _, user) = Build();
+
+        await sut.SetCoordsAsync(user.Id, 52.3791234, 4.9001234, null, precisionDecimals: 3);
+
+        var row = await test.Db.SharedLocations.SingleAsync();
+        row.Latitude.Should().Be(52.379);
+        row.Longitude.Should().Be(4.900);
+        test.Dispose();
+    }
+
+    [Fact]
+    public async Task SetByNameAsync_rounds_geocoder_coords_to_the_chosen_precision()
+    {
+        var (sut, test, geo, user) = Build();
+        // Geocoders routinely return 7+ decimal places. The user chose
+        // "city" precision, so nothing finer than that should be stored.
+        geo.NextResult = new GeocodeResult(52.3791234, 4.9001234, "Amsterdam");
+
+        await sut.SetByNameAsync(user.Id, "Amsterdam", label: null, precisionDecimals: 1);
+
+        var row = await test.Db.SharedLocations.SingleAsync();
+        row.Latitude.Should().Be(52.4);
+        row.Longitude.Should().Be(4.9);
+        test.Dispose();
+    }
+
+    [Fact]
+    public async Task UpdateMetaAsync_lowering_precision_re_rounds_the_stored_coords()
+    {
+        // Switching from "exact" to "city" mid-share should not leave the
+        // finer coords sitting on the row even though the public list
+        // would round them on output. A DB peek must reflect the user's
+        // current privacy choice.
+        var (sut, test, _, user) = Build();
+        await sut.SetCoordsAsync(user.Id, 52.3791234, 4.9001234, null, precisionDecimals: 5);
+        // Sanity: exact-tier kept 5 decimals.
+        (await test.Db.SharedLocations.SingleAsync()).Latitude.Should().Be(52.37912);
+
+        await sut.UpdateMetaAsync(user.Id, label: null, precisionDecimals: 1, clearLabel: false);
+
+        var row = await test.Db.SharedLocations.SingleAsync();
+        row.PrecisionDecimals.Should().Be(1);
+        row.Latitude.Should().Be(52.4);
+        row.Longitude.Should().Be(4.9);
+        test.Dispose();
+    }
+
+    [Fact]
     public async Task UpdateMetaAsync_updates_label_and_precision_without_touching_coords()
     {
         var (sut, test, _, user) = Build();

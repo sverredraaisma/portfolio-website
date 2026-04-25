@@ -31,7 +31,16 @@ public sealed class LocationService : ILocationService
     {
         ValidateCoords(latitude, longitude);
         var precision = await ValidatePrecisionOrDefault(precisionDecimals, userId, cancellationToken);
-        await UpsertAsync(userId, latitude, longitude, NormaliseLabel(label),
+        // Defence in depth: the frontend rounds before the RPC call so the
+        // server never sees raw GPS, but a misbehaving or rolled-back client
+        // can't sneak past that. Re-rounding here means the stored row is
+        // never more precise than the user's chosen tier — so an account
+        // export, an admin DB peek, or a backup leak only ever reveals the
+        // tier the user agreed to publish.
+        await UpsertAsync(userId,
+            Math.Round(latitude, precision),
+            Math.Round(longitude, precision),
+            NormaliseLabel(label),
             precision: precision, source: "browser", cancellationToken);
     }
 
@@ -49,7 +58,14 @@ public sealed class LocationService : ILocationService
         var effectiveLabel = NormaliseLabel(label) ?? NormaliseLabel(found.DisplayName);
         var precision = await ValidatePrecisionOrDefault(precisionDecimals, userId, cancellationToken);
 
-        await UpsertAsync(userId, found.Latitude, found.Longitude, effectiveLabel,
+        // Same rounding contract as the browser path — the geocoder may
+        // have returned 7-decimal-place coords ("centroid of Amsterdam"),
+        // but the user picked, say, "city" precision and shouldn't have
+        // anything finer than that persisted on their behalf.
+        await UpsertAsync(userId,
+            Math.Round(found.Latitude, precision),
+            Math.Round(found.Longitude, precision),
+            effectiveLabel,
             precision: precision, source: "named", cancellationToken);
     }
 
@@ -78,6 +94,15 @@ public sealed class LocationService : ILocationService
             if (existing.PrecisionDecimals != precisionDecimals.Value)
             {
                 existing.PrecisionDecimals = precisionDecimals.Value;
+                // Re-round the stored coords to the new tier. Without this
+                // a user who switched from "exact" to "city" would keep
+                // their full-precision lat/lon stored on the row — the
+                // public list would still round on output, but a DB peek
+                // (or a future export bug) would expose precision the
+                // user has explicitly dialled down. Rounding is idempotent
+                // when the new tier is finer than what's stored.
+                existing.Latitude = Math.Round(existing.Latitude, precisionDecimals.Value);
+                existing.Longitude = Math.Round(existing.Longitude, precisionDecimals.Value);
                 changed = true;
             }
         }

@@ -127,18 +127,22 @@ public class LocationE2eTests : IClassFixture<AppFactory>, IAsyncLifetime
     }
 
     [Fact]
-    public async Task Account_export_includes_full_precision_location_for_AVG_transparency()
+    public async Task Account_export_reflects_what_is_actually_stored_rounded_to_the_chosen_precision()
     {
+        // The server rounds inputs to the user's chosen precision tier on
+        // store (defence in depth — the frontend also rounds before the
+        // RPC call). The export echoes what's stored so the user sees
+        // exactly what their account holds: never finer than the tier they
+        // picked, even if a misbehaving client sent more decimals.
         await Rpc("location.shareCoords",
-            new { latitude = 52.3791234, longitude = 4.9001234, label = "home" },
+            new { latitude = 52.3791234, longitude = 4.9001234, label = "home", precisionDecimals = 3 },
             _aliceToken);
 
         var export = await Rpc("account.export", null, _aliceToken);
         var loc = export.GetProperty("result").GetProperty("sharedLocation");
 
-        // The export deliberately keeps the unrounded value so the user
-        // sees exactly what is stored. The public /location.list rounds.
-        loc.GetProperty("latitude").GetDouble().Should().Be(52.3791234);
-        loc.GetProperty("longitude").GetDouble().Should().Be(4.9001234);
+        loc.GetProperty("latitude").GetDouble().Should().Be(52.379);
+        loc.GetProperty("longitude").GetDouble().Should().Be(4.900);
+        loc.GetProperty("precisionDecimals").GetInt32().Should().Be(3);
     }
 }
