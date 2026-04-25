@@ -1,8 +1,38 @@
+// Permissive CSP that matches what nginx emits (see nginx/nginx.conf).
+// Keep these in lock-step: the browser intersects every CSP header it
+// receives, so a stricter Nitro default would shadow nginx's
+// 'unsafe-inline' allowances and break inline scripts/styles (Nuxt's
+// SSR hydration payload + the pre-hydration theme script are inline,
+// and Vue scoped styles get inlined too).
+//
+// Nuxt 3.16+ / Nitro 2.13+ ship a strict default
+// (default-src 'self') on HTML responses. Without this override the
+// intersection of Nitro's default and nginx's permissive header
+// blocks every inline tag in the served HTML.
+const CSP =
+  "default-src 'self'; " +
+  "script-src 'self' 'unsafe-inline'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: blob: https://*.tile.openstreetmap.org; " +
+  "font-src 'self'; " +
+  "connect-src 'self'; " +
+  "frame-ancestors 'none'; " +
+  "base-uri 'self'; " +
+  "form-action 'self'; " +
+  "object-src 'none'"
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
   css: ['~/assets/css/main.css'],
+  routeRules: {
+    '/**': {
+      headers: {
+        'Content-Security-Policy': CSP
+      }
+    }
+  },
   runtimeConfig: {
     // Server-only: used during SSR. In docker compose this points at
     // the backend service over the internal network (e.g. http://backend:8080).
