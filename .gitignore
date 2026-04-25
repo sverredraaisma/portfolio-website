@@ -39,6 +39,9 @@ backend/src/PortfolioApi/keys/
 *.swp
 *.swo
 
+# Local CLI / agent state
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
