@@ -329,19 +329,26 @@ public class PostMethods
             ?? throw new InvalidOperationException("Post not found");
         if (post.AuthorId != userId) throw new AuthFailedException("Not your post");
 
-        if (p.Title is not null) post.Title = NonNull(p.Title, "title", 200);
-        if (p.Slug is not null) post.Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200));
+        // Track whether any *content* field changed so we only bump
+        // UpdatedAt on real edits. Toggling Published or IsPinned is a
+        // visibility/curation change — bumping the timestamp would
+        // re-flag the post as newly-edited in the Atom feed and the
+        // sitemap, which would mislead subscribers and crawlers.
+        var contentChanged = false;
+        if (p.Title is not null) { post.Title = NonNull(p.Title, "title", 200); contentChanged = true; }
+        if (p.Slug is not null) { post.Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200)); contentChanged = true; }
         if (p.Blocks is { } blocks)
         {
             var raw = blocks.GetRawText();
             if (raw.Length > MaxBlocksDocBytes)
                 throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
             post.Blocks = JsonDocument.Parse(raw);
+            contentChanged = true;
         }
         if (p.Published.HasValue) post.Published = p.Published.Value;
         if (p.IsPinned.HasValue) post.IsPinned = p.IsPinned.Value;
-        if (p.Tags is not null) post.Tags = NormaliseTags(p.Tags);
-        post.UpdatedAt = DateTime.UtcNow;
+        if (p.Tags is not null) { post.Tags = NormaliseTags(p.Tags); contentChanged = true; }
+        if (contentChanged) post.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ctx.CancellationToken);
         return new UpdatePostResult(post.Id, post.Slug);

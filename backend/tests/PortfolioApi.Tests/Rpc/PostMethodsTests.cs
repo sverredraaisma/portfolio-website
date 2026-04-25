@@ -164,6 +164,35 @@ public class PostMethodsTests
     public Task List_filters_by_tag() => Task.CompletedTask;
 
     [Fact]
+    public async Task Update_visibility_toggles_do_not_bump_UpdatedAt()
+    {
+        // A pin/unpin or publish/unpublish is a curation change, not a
+        // content edit. Bumping UpdatedAt would re-flag the post in the
+        // Atom feed (per-entry <updated>) and the sitemap (<lastmod>),
+        // misleading subscribers and crawlers into thinking the body
+        // moved.
+        var (sut, db, admin, _) = Setup();
+        var created = await sut.Create(new CreatePostParams { Title = "t", Slug = "t", Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        var beforePin = (await db.Posts.SingleAsync(p => p.Id == created.Id)).UpdatedAt;
+        // Tick past any same-millisecond resolution so a real bump would
+        // visibly differ.
+        await Task.Delay(15);
+
+        await sut.Update(new UpdatePostParams { Id = created.Id, IsPinned = true }, TestRpcContext.Admin(admin.Id));
+        var afterPin = (await db.Posts.AsNoTracking().SingleAsync(p => p.Id == created.Id)).UpdatedAt;
+        afterPin.Should().Be(beforePin, "pinning isn't a content edit");
+
+        await sut.Update(new UpdatePostParams { Id = created.Id, Published = false }, TestRpcContext.Admin(admin.Id));
+        var afterUnpub = (await db.Posts.AsNoTracking().SingleAsync(p => p.Id == created.Id)).UpdatedAt;
+        afterUnpub.Should().Be(beforePin, "unpublishing isn't a content edit either");
+
+        // Sanity: a real content change DOES bump.
+        await sut.Update(new UpdatePostParams { Id = created.Id, Title = "t2" }, TestRpcContext.Admin(admin.Id));
+        var afterTitle = (await db.Posts.AsNoTracking().SingleAsync(p => p.Id == created.Id)).UpdatedAt;
+        afterTitle.Should().BeAfter(beforePin);
+    }
+
+    [Fact]
     public async Task List_orders_pinned_posts_ahead_of_the_date_tail()
     {
         // Pinned posts surface at the top regardless of CreatedAt order.
