@@ -98,14 +98,24 @@ watch(() => route.query.tag, (v) => {
   }
 })
 
+// Canonical: search engines should consolidate /posts, /posts?q=foo
+// and the per-tag view. Tagless searches collapse under /posts;
+// per-tag views get their own canonical so a tag landing page is
+// discoverable on its own.
+import { useCanonical } from '~/composables/useCanonical'
+const canonicalUrl = useCanonical(() => tag.value ? `/posts?tag=${tag.value}` : '/posts')
+
 // Feed-reader auto-discovery: when filtering by tag, expose the per-tag
 // RSS link so a "subscribe" button in the user's reader points at the
 // narrow feed instead of the whole site. The site-wide alternate stays
 // in nuxt.config.ts.
 useHead({
-  link: () => tag.value
-    ? [{ rel: 'alternate', type: 'application/rss+xml', title: `sverre.dev — #${tag.value}`, href: `/rss/${tag.value}.xml` }]
-    : []
+  link: () => [
+    ...(canonicalUrl.value ? [{ rel: 'canonical', href: canonicalUrl.value }] : []),
+    ...(tag.value
+      ? [{ rel: 'alternate', type: 'application/rss+xml', title: `sverre.dev — #${tag.value}`, href: `/rss/${tag.value}.xml` }]
+      : [])
+  ]
 })
 </script>
 

@@ -46,30 +46,8 @@ function description(blocks: Block[] | undefined): string {
 
 const readMinutes = computed(() => readingTimeMinutes(post.value?.blocks?.blocks))
 
-// canonical URL: prefer the configured public origin so the rendered
-// canonical can't be poisoned by a Host header injection from a
-// proxy that doesn't strip them. Falls back to the SSR Host header
-// only when no siteOrigin is configured (dev), and to
-// window.location.origin client-side. As a last resort we emit the
-// path alone — better than a wrong absolute URL.
-const config = useRuntimeConfig()
-const canonicalUrl = computed(() => {
-  if (!post.value) return undefined
-  const path = `/posts/${post.value.slug}`
-  const configured = config.public.siteOrigin
-  if (configured) return `${configured.replace(/\/$/, '')}${path}`
-  if (import.meta.server) {
-    const event = useRequestEvent()
-    if (event) {
-      const proto = event.node.req.headers['x-forwarded-proto'] || 'http'
-      const host = event.node.req.headers.host
-      if (host) return `${proto}://${host}${path}`
-    }
-  } else if (typeof window !== 'undefined') {
-    return `${window.location.origin}${path}`
-  }
-  return path
-})
+import { useCanonical } from '~/composables/useCanonical'
+const canonicalUrl = useCanonical(() => post.value ? `/posts/${post.value.slug}` : undefined)
 
 useSeoMeta({
   title: () => post.value?.title,
