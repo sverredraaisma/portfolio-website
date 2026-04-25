@@ -10,6 +10,7 @@ type PostSummary = {
   author: string
   tags: string[]
   commentCount: number
+  isPinned: boolean
 }
 type PostsPage = { items: PostSummary[]; page: number; pageSize: number; hasMore: boolean }
 
@@ -145,7 +146,9 @@ useHead({
     <ul v-else-if="posts.length" class="space-y-3">
       <li v-for="p in posts" :key="p.id" class="border border-zinc-300 dark:border-zinc-800 rounded p-4 hover:border-cyan-700 transition">
         <NuxtLink :to="`/posts/${p.slug}`" class="block">
-          <div class="text-lg">{{ p.title }}</div>
+          <div class="text-lg">
+            <span v-if="p.isPinned" class="text-cyan-400 mr-1" title="pinned">📌</span>{{ p.title }}
+          </div>
         </NuxtLink>
         <div class="text-xs text-zinc-500 mt-1">
           {{ formatTime(p.createdAt) }} ·

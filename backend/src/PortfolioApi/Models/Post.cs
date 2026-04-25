@@ -12,6 +12,12 @@ public class Post
     public JsonDocument Blocks { get; set; } = JsonDocument.Parse("{\"blocks\":[]}");
 
     public bool Published { get; set; }
+
+    /// Admin-only flag: pinned posts surface at the top of /posts ahead of
+    /// the date-ordered tail. Multiple posts can be pinned; among pinned
+    /// posts the standard CreatedAt-desc order applies.
+    public bool IsPinned { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

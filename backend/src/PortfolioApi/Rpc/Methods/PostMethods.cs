@@ -44,6 +44,7 @@ public sealed record UpdatePostParams
     public string? Slug { get; init; }
     public JsonElement? Blocks { get; init; }
     public bool? Published { get; init; }
+    public bool? IsPinned { get; init; }
     public IReadOnlyList<string>? Tags { get; init; }
 }
 
@@ -59,7 +60,7 @@ public sealed record UploadImageParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, IReadOnlyList<string> Tags, int CommentCount);
+public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, bool IsPinned, IReadOnlyList<string> Tags, int CommentCount);
 
 /// One entry in the tag-cloud response. `count` is the number of *published*
 /// posts carrying the tag — drafts don't contribute, since they're invisible
@@ -152,17 +153,19 @@ public class PostMethods
         }
 
         // Fetch one extra row so HasMore can be computed without a COUNT(*).
-        // Comment count is a correlated subquery — at pageSize <= 50 the
-        // overhead is negligible; the alternative (LEFT JOIN + GROUP BY)
-        // would explode the row count for posts with many tags via the
-        // text[] join.
+        // Pinned posts surface ahead of the date-ordered tail so admin can
+        // keep an evergreen post visible. Comment count is a correlated
+        // subquery — at pageSize <= 50 the overhead is negligible; the
+        // alternative (LEFT JOIN + GROUP BY) would explode the row count
+        // for posts with many tags via the text[] join.
         var rows = await query
-            .OrderByDescending(post => post.CreatedAt)
+            .OrderByDescending(post => post.IsPinned)
+            .ThenByDescending(post => post.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
             .Select(post => new PostSummary(
                 post.Id, post.Title, post.Slug, post.CreatedAt,
-                post.Author!.Username, post.Published, post.Tags,
+                post.Author!.Username, post.Published, post.IsPinned, post.Tags,
                 post.Comments.Count))
             .ToListAsync(ctx.CancellationToken);
 
@@ -336,6 +339,7 @@ public class PostMethods
             post.Blocks = JsonDocument.Parse(raw);
         }
         if (p.Published.HasValue) post.Published = p.Published.Value;
+        if (p.IsPinned.HasValue) post.IsPinned = p.IsPinned.Value;
         if (p.Tags is not null) post.Tags = NormaliseTags(p.Tags);
         post.UpdatedAt = DateTime.UtcNow;
 

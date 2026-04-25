@@ -9,7 +9,7 @@ definePageMeta({ middleware: 'admin' })
 
 type PostSummary = {
   id: string; title: string; slug: string; createdAt: string;
-  author: string; published: boolean
+  author: string; published: boolean; isPinned: boolean
 }
 type PostsPage = { items: PostSummary[]; page: number; pageSize: number; hasMore: boolean }
 
@@ -48,6 +48,19 @@ async function togglePublish(p: PostSummary) {
     await rpc.call<void>('posts.update', { id: p.id, published: !p.published })
     p.published = !p.published
     toast.success(p.published ? 'Published.' : 'Unpublished.')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    busyId.value = null
+  }
+}
+
+async function togglePin(p: PostSummary) {
+  busyId.value = p.id
+  try {
+    await rpc.call<void>('posts.update', { id: p.id, isPinned: !p.isPinned })
+    p.isPinned = !p.isPinned
+    toast.success(p.isPinned ? 'Pinned to the top of /posts.' : 'Unpinned.')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -118,6 +131,16 @@ onMounted(() => load(1))
         </div>
 
         <div class="flex gap-2 sm:gap-1 flex-wrap">
+          <button
+            :disabled="busyId === p.id"
+            @click="togglePin(p)"
+            class="text-xs px-2 py-1 rounded border disabled:opacity-50"
+            :class="p.isPinned
+              ? 'border-cyan-500 text-cyan-400 hover:border-cyan-400'
+              : 'border-zinc-300 dark:border-zinc-700 hover:border-cyan-500'"
+            :title="p.isPinned ? 'Unpin from top of /posts' : 'Pin to top of /posts'"
+          >{{ p.isPinned ? '📌 pinned' : 'pin' }}</button>
+
           <button
             :disabled="busyId === p.id"
             @click="togglePublish(p)"

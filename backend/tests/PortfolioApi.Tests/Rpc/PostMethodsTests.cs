@@ -164,6 +164,30 @@ public class PostMethodsTests
     public Task List_filters_by_tag() => Task.CompletedTask;
 
     [Fact]
+    public async Task List_orders_pinned_posts_ahead_of_the_date_tail()
+    {
+        // Pinned posts surface at the top regardless of CreatedAt order.
+        // Within the pinned tier the standard newest-first ordering still
+        // applies; same within the unpinned tier.
+        var (sut, db, admin, _) = Setup();
+        var oldUnpinned = await sut.Create(new CreatePostParams { Title = "old",   Slug = "old",   Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        var pinned     = await sut.Create(new CreatePostParams { Title = "pinned", Slug = "pin",   Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        var newUnpinned = await sut.Create(new CreatePostParams { Title = "newer", Slug = "newer", Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        // Toggle the pin AFTER create so we exercise the partial-update
+        // path the admin would actually use from the dashboard.
+        await sut.Update(new UpdatePostParams { Id = pinned.Id, IsPinned = true }, TestRpcContext.Admin(admin.Id));
+
+        var page = await sut.List(new PostListParams(), TestRpcContext.Anonymous());
+
+        // Slug-by-slug because CreatedAt ordering between rows created in
+        // the same millisecond is non-deterministic — pin slot is what we
+        // care about.
+        page.Items.Select(p => p.Slug).First().Should().Be("pin", "pinned must come first regardless of CreatedAt");
+        page.Items.Single(p => p.Slug == "pin").IsPinned.Should().BeTrue();
+        page.Items.Where(p => p.Slug != "pin").Select(p => p.IsPinned).Should().AllBeEquivalentTo(false);
+    }
+
+    [Fact]
     public async Task List_returns_per_post_comment_count()
     {
         var (sut, db, admin, member) = Setup();
