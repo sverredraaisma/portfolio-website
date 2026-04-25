@@ -92,6 +92,10 @@ services:
       # SSR-side: keep the request on the docker network instead of bouncing
       # back out through nginx.
       NUXT_API_BASE_INTERNAL: http://backend:8080
+      # Pinned so canonical / og:url can't be poisoned by a hostile Host
+      # header. Same value PUBLIC_ORIGIN gets so emails and canonical
+      # links agree.
+      NUXT_PUBLIC_SITE_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
 
   nginx:
     image: nginx:alpine

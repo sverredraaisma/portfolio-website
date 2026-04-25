@@ -9,7 +9,12 @@ export default defineNuxtConfig({
     apiBaseInternal: process.env.NUXT_API_BASE_INTERNAL || '',
     public: {
       // Sent to the browser. Must be reachable from the user's machine.
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:5080'
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:5080',
+      // Public origin used to build absolute URLs (canonical link, og:url).
+      // Pin this in production so the rendered canonical can't be poisoned
+      // via a hostile Host header. Empty falls back to the request Host
+      // header (dev) or window.location.origin (client navigation).
+      siteOrigin: process.env.NUXT_PUBLIC_SITE_ORIGIN || ''
     }
   },
   app: {
