@@ -241,7 +241,11 @@ public static class RssEndpoint
 
         writer.WriteStartElement("feed", "http://www.w3.org/2005/Atom");
         writer.WriteElementString("title", feedTitle);
-        writer.WriteElementString("id", alternateHtml);
+        // Convention: feed <id> is the self-URL of the feed, not the
+        // alternate HTML page. Aggregators key on this to detect feed
+        // moves; making it equal to the self-link keeps that contract
+        // tight.
+        writer.WriteElementString("id", feedSelf);
         writer.WriteElementString("updated", feedUpdated.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
 
         writer.WriteStartElement("link");

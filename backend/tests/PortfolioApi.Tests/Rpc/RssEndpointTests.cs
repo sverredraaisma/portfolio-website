@@ -184,6 +184,26 @@ public class RssEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GET_atom_xml_feed_id_equals_the_self_link_so_aggregators_dont_treat_origin_drift_as_a_feed_move()
+    {
+        // Aggregators use feed <id> to detect "the feed moved" and migrate
+        // subscriptions. If we keyed on the alternate HTML page (/posts),
+        // a future change to that landing page would force every reader
+        // to resubscribe. Keying on the self-URL (/atom.xml) couples the
+        // identity to the served-from path, which is what we control.
+        var response = await _client.GetAsync("/atom.xml");
+        var doc = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+
+        var feedId = doc.Root!.Element(atom + "id")!.Value;
+        var selfHref = doc.Root!.Elements(atom + "link")
+            .First(l => (string?)l.Attribute("rel") == "self")
+            .Attribute("href")!.Value;
+
+        feedId.Should().Be(selfHref);
+    }
+
+    [Fact]
     public async Task GET_atom_xml_carries_the_same_short_cache_header_as_rss()
     {
         var response = await _client.GetAsync("/atom.xml");
