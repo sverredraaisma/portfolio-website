@@ -97,6 +97,20 @@ public class EmailService : IEmailService
         string commenterUsername,
         string commentBody)
     {
+        var (subject, text, html) = BuildCommentNotification(
+            postTitle, postSlug, commentId, commenterUsername, commentBody, _opt.PostUrlBase);
+        return SendAsync(toEmail, subject, text, html);
+    }
+
+    /// Pure body construction for the comment-notification email. Lifted out
+    /// of the instance method so unit tests can verify HTML escaping and
+    /// length clamping without an SMTP host. The returned `html` is what
+    /// goes into the multipart's text/html part — assume it will be served
+    /// as HTML, so any user-supplied substring must be HTML-escaped.
+    public static (string Subject, string Text, string Html) BuildCommentNotification(
+        string postTitle, string postSlug, Guid commentId,
+        string commenterUsername, string commentBody, string postUrlBase)
+    {
         // The body comes straight from a user — escape it as HTML AND clamp
         // the length so a 2KB wall doesn't dominate the email.
         const int previewLen = 280;
@@ -105,7 +119,7 @@ public class EmailService : IEmailService
             : commentBody;
 
         // Anchor the link at the comment so the author lands on the row.
-        var link = $"{_opt.PostUrlBase}/{Uri.EscapeDataString(postSlug)}#c-{commentId}";
+        var link = $"{postUrlBase}/{Uri.EscapeDataString(postSlug)}#c-{commentId}";
         var safeTitle = HtmlEscape(postTitle);
         var safeUser = HtmlEscape(commenterUsername);
         var safeBody = HtmlEscape(clipped).Replace("\n", "<br>");
@@ -124,7 +138,7 @@ public class EmailService : IEmailService
             $"View the comment: {link}\n\n" +
             "You can turn off these notifications on your account page.\n";
         var subject = "New comment on " + postTitle.Replace('\n', ' ').Replace('\r', ' ');
-        return SendAsync(toEmail, subject, text, html);
+        return (subject, text, html);
     }
 
     // Small inline HTML escape — actionLabel and extraNote are server-supplied
@@ -137,13 +151,16 @@ public class EmailService : IEmailService
         .Replace("\"", "&quot;")
         .Replace("'", "&#39;");
 
-    private async Task SendAsync(string toEmail, string subject, string text, string html)
+    /// Builds the MimeMessage without dispatching. Public so unit tests can
+    /// assert on the constructed envelope (subject, parts, escaping) without
+    /// needing an SMTP server. Defaults `from` to the configured address.
+    public static MimeMessage BuildMessage(string fromEmail, string toEmail, string subject, string text, string html)
     {
-        if (string.IsNullOrWhiteSpace(_opt.From))
+        if (string.IsNullOrWhiteSpace(fromEmail))
             throw new InvalidOperationException("Email:From is not configured");
 
         var msg = new MimeMessage();
-        msg.From.Add(MailboxAddress.Parse(_opt.From));
+        msg.From.Add(MailboxAddress.Parse(fromEmail));
         msg.To.Add(MailboxAddress.Parse(toEmail));
         msg.Subject = subject;
         // multipart/alternative: text-only readers (mutt, screen readers, some
@@ -154,6 +171,12 @@ public class EmailService : IEmailService
             new TextPart("plain") { Text = text },
             new TextPart("html") { Text = html }
         };
+        return msg;
+    }
+
+    private async Task SendAsync(string toEmail, string subject, string text, string html)
+    {
+        var msg = BuildMessage(_opt.From, toEmail, subject, text, html);
 
         if (string.IsNullOrWhiteSpace(_opt.SmtpHost))
         {
