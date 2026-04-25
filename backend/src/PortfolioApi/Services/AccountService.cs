@@ -65,7 +65,7 @@ public class AccountService : IAccountService
         var location = await _db.SharedLocations
             .AsNoTracking()
             .Where(s => s.UserId == userId)
-            .Select(s => new AccountExportLocation(s.Latitude, s.Longitude, s.Label, s.Source, s.UpdatedAt))
+            .Select(s => new AccountExportLocation(s.Latitude, s.Longitude, s.Label, s.Source, s.PrecisionDecimals, s.UpdatedAt))
             .FirstOrDefaultAsync(cancellationToken);
 
         // Bookmarks include the post title + slug so the export reads

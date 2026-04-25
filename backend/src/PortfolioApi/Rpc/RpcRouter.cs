@@ -118,6 +118,7 @@ public class RpcRouter
         Register("location.getMine",     RpcHandlers.Typed<SharedLocationDto?>(locations.GetMine));
         Register("location.shareCoords", RpcHandlers.Typed<ShareCoordsParams, OkResult>(locations.ShareCoords));
         Register("location.shareNamed",  RpcHandlers.Typed<ShareNamedParams, OkResult>(locations.ShareNamed));
+        Register("location.updateMeta",  RpcHandlers.Typed<UpdateLocationMetaParams, OkResult>(locations.UpdateMeta));
         Register("location.clear",       RpcHandlers.Typed<OkResult>(locations.Clear));
     }
 

@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using PortfolioApi.Configuration;
 using PortfolioApi.Constants;
 using PortfolioApi.Data;
 using PortfolioApi.Models;
@@ -9,26 +7,35 @@ namespace PortfolioApi.Services;
 
 public sealed class LocationService : ILocationService
 {
+    // Each user picks a precision in this range. 5 ≈ ~1m ("find me in this
+    // building"), 0 ≈ ~111km ("somewhere on the continent"). Anything
+    // outside is rejected — values < 0 are nonsensical, values > 5 leak
+    // sub-metre accuracy that GPS rarely actually achieves and pretending
+    // it's meaningful would mislead viewers.
+    private const int MinPrecision = 0;
+    private const int MaxPrecision = 5;
+    private const int DefaultPrecision = 3;
+
     private readonly AppDbContext _db;
     private readonly IGeocodingService _geocoder;
     private readonly IAuditService _audit;
-    private readonly LocationOptions _opt;
 
-    public LocationService(AppDbContext db, IGeocodingService geocoder, IAuditService audit, IOptions<LocationOptions> opt)
+    public LocationService(AppDbContext db, IGeocodingService geocoder, IAuditService audit)
     {
         _db = db;
         _geocoder = geocoder;
         _audit = audit;
-        _opt = opt.Value;
     }
 
-    public async Task SetCoordsAsync(Guid userId, double latitude, double longitude, string? label, CancellationToken cancellationToken = default)
+    public async Task SetCoordsAsync(Guid userId, double latitude, double longitude, string? label, int? precisionDecimals, CancellationToken cancellationToken = default)
     {
         ValidateCoords(latitude, longitude);
-        await UpsertAsync(userId, latitude, longitude, NormaliseLabel(label), source: "browser", cancellationToken);
+        var precision = await ValidatePrecisionOrDefault(precisionDecimals, userId, cancellationToken);
+        await UpsertAsync(userId, latitude, longitude, NormaliseLabel(label),
+            precision: precision, source: "browser", cancellationToken);
     }
 
-    public async Task SetByNameAsync(Guid userId, string placeName, CancellationToken cancellationToken = default)
+    public async Task SetByNameAsync(Guid userId, string placeName, string? label, int? precisionDecimals, CancellationToken cancellationToken = default)
     {
         var trimmed = (placeName ?? "").Trim();
         if (trimmed.Length == 0) throw new InvalidOperationException("place required");
@@ -37,8 +44,50 @@ public sealed class LocationService : ILocationService
         var found = await _geocoder.SearchAsync(trimmed, cancellationToken)
             ?? throw new InvalidOperationException("Could not find that place. Try a more specific query.");
 
-        await UpsertAsync(userId, found.Latitude, found.Longitude,
-            NormaliseLabel(found.DisplayName), source: "named", cancellationToken);
+        // User-supplied label wins; geocoder's display name fills in when
+        // the user didn't supply one.
+        var effectiveLabel = NormaliseLabel(label) ?? NormaliseLabel(found.DisplayName);
+        var precision = await ValidatePrecisionOrDefault(precisionDecimals, userId, cancellationToken);
+
+        await UpsertAsync(userId, found.Latitude, found.Longitude, effectiveLabel,
+            precision: precision, source: "named", cancellationToken);
+    }
+
+    public async Task<bool> UpdateMetaAsync(Guid userId, string? label, int? precisionDecimals, bool clearLabel, CancellationToken cancellationToken = default)
+    {
+        var existing = await _db.SharedLocations.FirstOrDefaultAsync(s => s.UserId == userId, cancellationToken);
+        if (existing is null) return false;
+
+        var changed = false;
+        if (clearLabel)
+        {
+            if (existing.Label is not null) { existing.Label = null; changed = true; }
+        }
+        else if (label is not null)
+        {
+            var normalised = NormaliseLabel(label);
+            if (!string.Equals(existing.Label, normalised, StringComparison.Ordinal))
+            {
+                existing.Label = normalised;
+                changed = true;
+            }
+        }
+        if (precisionDecimals.HasValue)
+        {
+            ValidatePrecision(precisionDecimals.Value);
+            if (existing.PrecisionDecimals != precisionDecimals.Value)
+            {
+                existing.PrecisionDecimals = precisionDecimals.Value;
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            existing.UpdatedAt = DateTime.UtcNow;
+            _audit.Record(userId, AuditKind.LocationUpdated, "meta");
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        return true;
     }
 
     public async Task ClearAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -55,7 +104,6 @@ public sealed class LocationService : ILocationService
 
     public async Task<IReadOnlyList<SharedLocationDto>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var precision = _opt.PublicPrecisionDecimals;
         var rows = await _db.SharedLocations
             .AsNoTracking()
             .OrderByDescending(s => s.UpdatedAt)
@@ -66,24 +114,26 @@ public sealed class LocationService : ILocationService
                 s.Latitude,
                 s.Longitude,
                 s.Label,
+                s.PrecisionDecimals,
                 s.UpdatedAt
             })
             .ToListAsync(cancellationToken);
 
-        // Rounding happens in-memory: Math.Round on the projection lets EF
-        // ship plain SELECTs and keeps the precision policy in one place.
+        // Per-row precision: each user picks how rounded their coords are.
+        // Rounding happens in-memory after the projection so the SELECT
+        // stays a plain projection — EF doesn't have to translate Round.
         return rows.Select(r => new SharedLocationDto(
             r.Username,
             r.IsAdmin,
-            Math.Round(r.Latitude, precision),
-            Math.Round(r.Longitude, precision),
+            Math.Round(r.Latitude, r.PrecisionDecimals),
+            Math.Round(r.Longitude, r.PrecisionDecimals),
             r.Label,
+            r.PrecisionDecimals,
             r.UpdatedAt)).ToList();
     }
 
     public async Task<SharedLocationDto?> GetMineAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        var precision = _opt.PublicPrecisionDecimals;
         var row = await _db.SharedLocations
             .AsNoTracking()
             .Where(s => s.UserId == userId)
@@ -94,18 +144,19 @@ public sealed class LocationService : ILocationService
                 s.Latitude,
                 s.Longitude,
                 s.Label,
+                s.PrecisionDecimals,
                 s.UpdatedAt
             })
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is null ? null : new SharedLocationDto(
             row.Username, row.IsAdmin,
-            Math.Round(row.Latitude, precision),
-            Math.Round(row.Longitude, precision),
-            row.Label, row.UpdatedAt);
+            Math.Round(row.Latitude, row.PrecisionDecimals),
+            Math.Round(row.Longitude, row.PrecisionDecimals),
+            row.Label, row.PrecisionDecimals, row.UpdatedAt);
     }
 
-    private async Task UpsertAsync(Guid userId, double lat, double lon, string? label, string source, CancellationToken cancellationToken)
+    private async Task UpsertAsync(Guid userId, double lat, double lon, string? label, int precision, string source, CancellationToken cancellationToken)
     {
         var existing = await _db.SharedLocations.FirstOrDefaultAsync(s => s.UserId == userId, cancellationToken);
         var isFirstShare = existing is null;
@@ -117,7 +168,8 @@ public sealed class LocationService : ILocationService
                 Latitude = lat,
                 Longitude = lon,
                 Label = label,
-                Source = source
+                Source = source,
+                PrecisionDecimals = precision
             });
         }
         else
@@ -126,6 +178,7 @@ public sealed class LocationService : ILocationService
             existing.Longitude = lon;
             existing.Label = label;
             existing.Source = source;
+            existing.PrecisionDecimals = precision;
             existing.UpdatedAt = DateTime.UtcNow;
         }
         _audit.Record(userId, isFirstShare ? AuditKind.LocationShared : AuditKind.LocationUpdated, source);
@@ -137,6 +190,28 @@ public sealed class LocationService : ILocationService
         if (double.IsNaN(lat) || double.IsNaN(lon)) throw new InvalidOperationException("coords must be real numbers");
         if (lat < -90 || lat > 90)   throw new InvalidOperationException("latitude must be between -90 and 90");
         if (lon < -180 || lon > 180) throw new InvalidOperationException("longitude must be between -180 and 180");
+    }
+
+    private static void ValidatePrecision(int precision)
+    {
+        if (precision < MinPrecision || precision > MaxPrecision)
+            throw new InvalidOperationException($"precisionDecimals must be between {MinPrecision} and {MaxPrecision}");
+    }
+
+    /// On a fresh share with no precision argument we want the user's
+    /// previously-chosen precision rather than reverting to the default —
+    /// otherwise a user who picked "exact" for a meet-up would silently
+    /// snap back to the default the next time they re-shared. Falls back
+    /// to 3 only when no row exists yet.
+    private async Task<int> ValidatePrecisionOrDefault(int? supplied, Guid userId, CancellationToken ct)
+    {
+        if (supplied.HasValue) { ValidatePrecision(supplied.Value); return supplied.Value; }
+        var existing = await _db.SharedLocations
+            .AsNoTracking()
+            .Where(s => s.UserId == userId)
+            .Select(s => (int?)s.PrecisionDecimals)
+            .FirstOrDefaultAsync(ct);
+        return existing ?? DefaultPrecision;
     }
 
     private static string? NormaliseLabel(string? raw)

@@ -8,6 +8,7 @@ type Pin = {
   latitude: number
   longitude: number
   label?: string | null
+  precisionDecimals: number
   updatedAt: string
 }
 
@@ -53,9 +54,10 @@ useHead({
     </header>
 
     <p class="text-xs text-zinc-500 max-w-prose">
-      Coordinates are rounded to ~110m before they reach this page so an
-      exact home address can't be inferred. Anyone with an account can
-      share their location from <NuxtLink to="/account" class="underline hover:text-cyan-400">/account</NuxtLink>;
+      Each pin is rounded to the precision its sharer picked — ranging from "exact" (~1 m, useful
+      for meet-ups) down to "region" (~110 km, deliberately fuzzy). Click a pin for the label and
+      precision the sharer chose. Anyone with an account can share their location from
+      <NuxtLink to="/account" class="underline hover:text-cyan-400">/account</NuxtLink>;
       it's opt-in and clearable any time.
     </p>
 

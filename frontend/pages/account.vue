@@ -158,6 +158,7 @@ type SharedLocation = {
   latitude: number
   longitude: number
   label: string | null
+  precisionDecimals: number
   updatedAt: string
 }
 const myLocation = ref<SharedLocation | null>(null)
@@ -165,8 +166,43 @@ const placeQuery = ref('')
 const locationBusy = ref(false)
 const locationMessage = ref('')
 
+// Precision tiers — kept in lock-step with LocationService.MinPrecision /
+// MaxPrecision on the backend. The metres figure is approximate (cos(lat)
+// shrinks longitudinal degrees away from the equator) but the order of
+// magnitude is what visitors actually need to reason about.
+const PRECISION_OPTIONS = [
+  { value: 5, label: 'exact',         hint: '~1 m'   },
+  { value: 4, label: 'building',      hint: '~11 m'  },
+  { value: 3, label: 'block',         hint: '~110 m' },
+  { value: 2, label: 'neighbourhood', hint: '~1 km'  },
+  { value: 1, label: 'city',          hint: '~11 km' },
+  { value: 0, label: 'region',        hint: '~110 km' }
+] as const
+const DEFAULT_PRECISION = 3
+
+// Inputs for a fresh share. Pre-populated from the existing pin so a
+// re-share doesn't surprise the user by reverting to defaults.
+const sharePrecision = ref<number>(DEFAULT_PRECISION)
+const shareLabel = ref<string>('')
+
+// "Edit" mode lets the user change label/precision on an existing pin
+// without re-locating (no second geolocation prompt, no second geocoder
+// roundtrip). Backed by location.updateMeta on the backend.
+const editingMeta = ref(false)
+const editLabel = ref<string>('')
+const editPrecision = ref<number>(DEFAULT_PRECISION)
+
+function syncShareDefaultsFromMyLocation() {
+  if (!myLocation.value) return
+  sharePrecision.value = myLocation.value.precisionDecimals
+  shareLabel.value = myLocation.value.label ?? ''
+}
+
 async function loadMyLocation() {
-  try { myLocation.value = await rpc.call<SharedLocation | null>('location.getMine') }
+  try {
+    myLocation.value = await rpc.call<SharedLocation | null>('location.getMine')
+    syncShareDefaultsFromMyLocation()
+  }
   catch { /* anonymous loadExport will surface the auth error elsewhere */ }
 }
 
@@ -177,14 +213,19 @@ async function shareBrowserLocation() {
     return
   }
   locationBusy.value = true
-  // navigator.geolocation is callback-based — wrap so we can await.
+  // High-accuracy GPS is only useful if the user actually wants more
+  // precision than ~110m; otherwise the extra battery and slower fix
+  // would be wasted (the rounding throws away the precision anyway).
+  const wantsHighAccuracy = sharePrecision.value >= 4
   await new Promise<void>((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
           await rpc.call<void>('location.shareCoords', {
             latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude
+            longitude: pos.coords.longitude,
+            label: shareLabel.value.trim() || null,
+            precisionDecimals: sharePrecision.value
           })
           toast.success('Location shared.')
           await loadMyLocation()
@@ -202,7 +243,7 @@ async function shareBrowserLocation() {
         locationBusy.value = false
         resolve()
       },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
+      { enableHighAccuracy: wantsHighAccuracy, timeout: 10_000, maximumAge: 60_000 }
     )
   })
 }
@@ -212,9 +253,48 @@ async function shareNamedLocation() {
   locationMessage.value = ''
   locationBusy.value = true
   try {
-    await rpc.call<void>('location.shareNamed', { place: placeQuery.value })
+    await rpc.call<void>('location.shareNamed', {
+      place: placeQuery.value,
+      label: shareLabel.value.trim() || null,
+      precisionDecimals: sharePrecision.value
+    })
     toast.success('Location shared.')
     placeQuery.value = ''
+    await loadMyLocation()
+  } catch (e) {
+    locationMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    locationBusy.value = false
+  }
+}
+
+function startEditingMeta() {
+  if (!myLocation.value) return
+  editLabel.value = myLocation.value.label ?? ''
+  editPrecision.value = myLocation.value.precisionDecimals
+  editingMeta.value = true
+}
+
+function cancelEditingMeta() {
+  editingMeta.value = false
+}
+
+async function saveEditMeta() {
+  if (!myLocation.value) return
+  locationBusy.value = true
+  locationMessage.value = ''
+  try {
+    const trimmed = editLabel.value.trim()
+    await rpc.call<void>('location.updateMeta', {
+      // clearLabel: true is the only way to wipe a label — sending null
+      // means "leave alone" everywhere else in the API. An empty input
+      // here clearly means "remove the label".
+      clearLabel: trimmed.length === 0,
+      label: trimmed.length === 0 ? null : trimmed,
+      precisionDecimals: editPrecision.value
+    })
+    toast.success('Label / precision updated.')
+    editingMeta.value = false
     await loadMyLocation()
   } catch (e) {
     locationMessage.value = e instanceof Error ? e.message : String(e)
@@ -235,6 +315,10 @@ async function clearLocation() {
   } finally {
     locationBusy.value = false
   }
+}
+
+function precisionLabel(decimals: number): string {
+  return PRECISION_OPTIONS.find(o => o.value === decimals)?.label ?? `${decimals} dp`
 }
 
 // Verification expiry banner state
@@ -683,28 +767,114 @@ async function deleteAccount() {
         <h2 class="text-lg text-cyan-400">$ share location</h2>
         <p class="text-xs text-zinc-500 max-w-prose">
           Pin yourself on the public <NuxtLink to="/map" class="underline hover:text-cyan-400">/map</NuxtLink>.
-          Coords are rounded to ~110m before they reach the wire — your exact
-          home address can't be inferred. Opt-in; clear it any time.
+          You pick how rounded your coords are before they reach the wire — pick "exact" for a meet-up
+          where friends need to find you in a specific building, or "city" / "region" for a privacy-
+          forward share. Add a label so others know what the pin is for.
+          Opt-in; clear it any time.
         </p>
 
-        <div v-if="myLocation" class="text-sm border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 rounded p-3 space-y-1">
+        <div v-if="myLocation" class="text-sm border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 rounded p-3 space-y-2">
           <div>
             currently sharing:
             <span class="text-cyan-700 dark:text-cyan-300 font-mono">
-              {{ myLocation.latitude.toFixed(3) }}, {{ myLocation.longitude.toFixed(3) }}
+              {{ myLocation.latitude.toFixed(myLocation.precisionDecimals) }}, {{ myLocation.longitude.toFixed(myLocation.precisionDecimals) }}
+            </span>
+            <span class="text-xs text-zinc-500">
+              · precision: {{ precisionLabel(myLocation.precisionDecimals) }}
             </span>
           </div>
           <div v-if="myLocation.label" class="text-xs text-zinc-500 truncate">
-            label: {{ myLocation.label }}
+            label: <span class="text-zinc-700 dark:text-zinc-300">{{ myLocation.label }}</span>
           </div>
           <div class="text-xs text-zinc-500">
             updated {{ new Date(myLocation.updatedAt).toLocaleString() }}
           </div>
-          <button
-            :disabled="locationBusy"
-            @click="clearLocation"
-            class="text-xs mt-1 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-3 py-1 disabled:opacity-50"
-          >stop sharing</button>
+
+          <div v-if="!editingMeta" class="flex flex-wrap gap-2 pt-1">
+            <button
+              :disabled="locationBusy"
+              @click="startEditingMeta"
+              class="text-xs bg-cyan-700 hover:bg-cyan-600 text-white rounded px-3 py-1 disabled:opacity-50"
+            >✎ edit label / precision</button>
+            <button
+              :disabled="locationBusy"
+              @click="clearLocation"
+              class="text-xs bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-3 py-1 disabled:opacity-50"
+            >stop sharing</button>
+          </div>
+
+          <div v-else class="space-y-2 pt-2 border-t border-cyan-300/40 dark:border-cyan-800/60">
+            <label class="block text-xs">
+              <span class="text-zinc-600 dark:text-zinc-400">Label</span>
+              <input
+                v-model="editLabel"
+                maxlength="120"
+                placeholder="e.g. Software developer meetup"
+                class="mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm"
+              />
+              <span class="text-[10px] text-zinc-500">{{ editLabel.length }}/120 — leave blank to remove the label</span>
+            </label>
+            <fieldset class="space-y-1">
+              <legend class="text-xs text-zinc-600 dark:text-zinc-400">Precision</legend>
+              <div class="flex flex-wrap gap-2">
+                <label
+                  v-for="opt in PRECISION_OPTIONS"
+                  :key="opt.value"
+                  class="text-xs inline-flex items-center gap-1 cursor-pointer px-2 py-1 rounded border"
+                  :class="editPrecision === opt.value
+                    ? 'border-cyan-500 bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-200'
+                    : 'border-zinc-300 dark:border-zinc-700 hover:border-cyan-500'"
+                >
+                  <input type="radio" :value="opt.value" v-model="editPrecision" class="sr-only" />
+                  <span class="font-medium">{{ opt.label }}</span>
+                  <span class="text-[10px] text-zinc-500">{{ opt.hint }}</span>
+                </label>
+              </div>
+            </fieldset>
+            <div class="flex gap-2">
+              <button
+                :disabled="locationBusy"
+                @click="saveEditMeta"
+                class="text-xs bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-3 py-1 disabled:opacity-50"
+              >save</button>
+              <button
+                :disabled="locationBusy"
+                @click="cancelEditingMeta"
+                class="text-xs border border-zinc-400 dark:border-zinc-600 hover:border-cyan-500 rounded px-3 py-1 disabled:opacity-50"
+              >cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings that apply to whichever share method you click below. -->
+        <div class="space-y-2 border border-zinc-300 dark:border-zinc-800 rounded p-3">
+          <label class="block text-xs">
+            <span class="text-zinc-600 dark:text-zinc-400">Label (optional, shown next to your pin)</span>
+            <input
+              v-model="shareLabel"
+              maxlength="120"
+              placeholder="e.g. Software developer meetup"
+              class="mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm"
+            />
+            <span class="text-[10px] text-zinc-500">{{ shareLabel.length }}/120</span>
+          </label>
+          <fieldset class="space-y-1">
+            <legend class="text-xs text-zinc-600 dark:text-zinc-400">Precision (how much the public list rounds your coords)</legend>
+            <div class="flex flex-wrap gap-2">
+              <label
+                v-for="opt in PRECISION_OPTIONS"
+                :key="opt.value"
+                class="text-xs inline-flex items-center gap-1 cursor-pointer px-2 py-1 rounded border"
+                :class="sharePrecision === opt.value
+                  ? 'border-cyan-500 bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-200'
+                  : 'border-zinc-300 dark:border-zinc-700 hover:border-cyan-500'"
+              >
+                <input type="radio" :value="opt.value" v-model="sharePrecision" class="sr-only" />
+                <span class="font-medium">{{ opt.label }}</span>
+                <span class="text-[10px] text-zinc-500">{{ opt.hint }}</span>
+              </label>
+            </div>
+          </fieldset>
         </div>
 
         <div class="grid sm:grid-cols-2 gap-3">

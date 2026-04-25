@@ -16,7 +16,7 @@ public sealed record AccountExportAuditEvent(Guid Id, string Kind, string? Detai
 /// Echoes the FULL-precision values from the row — the AVG export is meant
 /// to be exhaustive (art. 15: the user gets to see exactly what's stored).
 /// The public list applies rounding; this projection deliberately doesn't.
-public sealed record AccountExportLocation(double Latitude, double Longitude, string? Label, string Source, DateTime UpdatedAt);
+public sealed record AccountExportLocation(double Latitude, double Longitude, string? Label, string Source, int PrecisionDecimals, DateTime UpdatedAt);
 public sealed record AccountExportBookmark(Guid Id, Guid PostId, string PostTitle, string PostSlug, DateTime SavedAt);
 
 /// Everything the service knows about the account, in a shape suitable for

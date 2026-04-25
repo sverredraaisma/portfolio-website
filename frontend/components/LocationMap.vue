@@ -7,6 +7,19 @@ type Pin = {
   latitude: number
   longitude: number
   label?: string | null
+  precisionDecimals?: number
+}
+
+// Match the tier names shown on /account so visitors who set their own
+// precision recognise the language. Older callers that don't pass
+// precisionDecimals get a blank precision line in the popup.
+const PRECISION_LABEL: Record<number, string> = {
+  5: 'exact (~1 m)',
+  4: 'building (~11 m)',
+  3: 'block (~110 m)',
+  2: 'neighbourhood (~1 km)',
+  1: 'city (~11 km)',
+  0: 'region (~110 km)'
 }
 
 const props = defineProps<{
@@ -62,7 +75,15 @@ async function drawMarkers(L?: any) {
       iconAnchor: [8, 24]
     })
     const marker = Lib.marker([pin.latitude, pin.longitude], { icon }).addTo(map)
-    if (pin.label) marker.bindPopup(`<strong>${escapeHtml(pin.username)}</strong><br>${escapeHtml(pin.label)}`)
+    // Build a popup whenever there's anything beyond the username worth
+    // showing — a label, a precision tier, or both.
+    const lines: string[] = []
+    if (pin.label) lines.push(escapeHtml(pin.label))
+    const precisionText = pin.precisionDecimals !== undefined ? PRECISION_LABEL[pin.precisionDecimals] : undefined
+    if (precisionText) lines.push(`<span class="pin-popup-precision">precision: ${escapeHtml(precisionText)}</span>`)
+    if (lines.length > 0) {
+      marker.bindPopup(`<strong>${escapeHtml(pin.username)}</strong><br>${lines.join('<br>')}`)
+    }
     markers.push(marker)
   }
 
@@ -134,6 +155,13 @@ onBeforeUnmount(() => {
 }
 .pin .pin-dot-admin {
   background: rgb(248, 113, 113);
+}
+
+/* Secondary line in popups — visually distinct from the user-supplied label. */
+.pin-popup-precision {
+  display: inline-block;
+  font-size: 11px;
+  color: #6b7280;
 }
 
 /* Tone down Leaflet's default attribution box in dark mode. */

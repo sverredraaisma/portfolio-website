@@ -16,8 +16,7 @@ public sealed class LocationOptions
     ///   Location__UserAgent="sverre.dev (sverre@draaisma.dev)"
     public string UserAgent { get; set; } = "PortfolioWebsite (set Location__UserAgent in env)";
 
-    /// Decimal places to round coordinates to before serving on the public
-    /// list. 3 ≈ 110m precision; close enough to "this person is in this
-    /// city" without leaking the home address.
-    public int PublicPrecisionDecimals { get; set; } = 3;
+    // PublicPrecisionDecimals used to live here as a global default. It is
+    // now per-row on SharedLocation so each user picks their own privacy/
+    // utility trade-off — see LocationService.MinPrecision/MaxPrecision.
 }
