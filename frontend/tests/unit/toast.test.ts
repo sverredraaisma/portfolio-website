@@ -26,7 +26,8 @@ describe('useToast', () => {
     expect(t.toasts.value).toHaveLength(1)
 
     vi.advanceTimersByTime(2999)
-    expect(t.toasts.value).toHaveLength(1, 'still alive just before the 3s mark')
+    // still alive just before the 3s mark
+    expect(t.toasts.value).toHaveLength(1)
 
     vi.advanceTimersByTime(2)
     expect(t.toasts.value).toHaveLength(0)

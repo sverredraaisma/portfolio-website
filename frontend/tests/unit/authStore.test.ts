@@ -49,7 +49,8 @@ describe('useAuthStore', () => {
 
     expect(auth.accessToken).toBe('a2')
     expect(auth.refreshToken).toBe('r2')
-    expect(auth.user?.username).toBe('alice', 'rotation must not log the user out')
+    // rotation must not log the user out
+    expect(auth.user?.username).toBe('alice')
   })
 
   it('logout() clears every session field', () => {

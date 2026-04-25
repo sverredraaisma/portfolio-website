@@ -50,7 +50,8 @@ describe('bindShortcuts', () => {
     press('g', input)
     press('p', input)
 
-    expect(calls).toEqual([], 'no nav while focused in an input')
+    // no nav while focused in an input
+    expect(calls).toEqual([])
     off()
     input.remove()
   })

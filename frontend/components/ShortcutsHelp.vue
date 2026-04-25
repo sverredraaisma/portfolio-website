@@ -5,7 +5,9 @@ const open = defineModel<boolean>({ required: true })
 function close() { open.value = false }
 
 // Esc closes the overlay; bound while it's open so it doesn't fight the
-// global shortcut listener.
+// global shortcut listener. immediate:true so a dialog that mounts in the
+// open=true state (externally controlled, deep link, etc) still wires the
+// listener on first paint instead of waiting for the next toggle.
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') close()
 }
@@ -13,7 +15,7 @@ watch(open, (v) => {
   if (typeof window === 'undefined') return
   if (v) window.addEventListener('keydown', onKey)
   else window.removeEventListener('keydown', onKey)
-})
+}, { immediate: true })
 </script>
 
 <template>

@@ -40,3 +40,10 @@ globals.useToast = realUseToast
 // useBlocks is a pure registry lookup; safe to expose directly.
 import { useBlocks as realUseBlocks } from '~/composables/useBlocks'
 globals.useBlocks = realUseBlocks
+
+// Nuxt's runtime config — only the public surface is read by components
+// (e.g. apiBase for prefixing relative media URLs). Returns sensible
+// defaults so tests don't have to wire each component to a config object.
+globals.useRuntimeConfig = () => ({
+  public: { apiBase: 'http://localhost:5080' }
+})
