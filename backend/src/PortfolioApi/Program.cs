@@ -69,14 +69,19 @@ using (var scope = app.Services.CreateScope())
     // First-boot bootstrap: if there are no accounts at all, seed the owner.
     // The password is random and never disclosed; the owner uses the password
     // reset flow against the configured email to gain access.
-    var seeded = await auth.SeedAdminIfEmptyAsync(
-        username: "opperautist",
-        email: "sverre@draaisma.dev");
+    //
+    // Username + email come from config so a fork doesn't silently seed
+    // an account in the original owner's name. Defaults match the owner's
+    // own deploy so the existing setup keeps booting unchanged.
+    var seedUsername = builder.Configuration["Admin:SeedUsername"] ?? "opperautist";
+    var seedEmail    = builder.Configuration["Admin:SeedEmail"]    ?? "sverre@draaisma.dev";
+    var seeded = await auth.SeedAdminIfEmptyAsync(seedUsername, seedEmail);
     if (seeded)
     {
         log.LogInformation(
-            "Seeded admin account 'opperautist' (sverre@draaisma.dev). " +
-            "Use the password-reset flow against that email to claim it.");
+            "Seeded admin account '{Username}' ({Email}). " +
+            "Use the password-reset flow against that email to claim it.",
+            seedUsername, seedEmail);
     }
 }
 

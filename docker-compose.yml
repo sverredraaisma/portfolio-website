@@ -59,6 +59,12 @@ services:
       # Nominatim insists on a real User-Agent (with a contact address);
       # missing UA → 403 from the public service.
       Location__UserAgent: ${LOCATION_USER_AGENT:-PortfolioWebsite (set LOCATION_USER_AGENT in .env)}
+      # Seeded on first boot when the Users table is empty. Override these
+      # in .env if you fork the project — otherwise the very first boot
+      # creates an admin under the upstream owner's email, which the
+      # password-reset flow can't deliver to you.
+      Admin__SeedUsername: ${ADMIN_USERNAME:-opperautist}
+      Admin__SeedEmail:    ${ADMIN_EMAIL:-sverre@draaisma.dev}
     volumes:
       - backend_media:/app/media
       # Falcon-512 signing keypair, generated on first boot. Persisted so
