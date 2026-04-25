@@ -515,7 +515,30 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken)
             ?? throw new AuthFailedException("Refresh token not found");
 
-        if (stored.RevokedAt is not null) throw new AuthFailedException("Refresh token revoked");
+        if (stored.RevokedAt is not null)
+        {
+            // Reuse detection. A refresh token that was already rotated is
+            // being presented again — either the legit user lost the race
+            // with an attacker who stole the token, or vice versa. Either
+            // way it's a strong compromise signal, so we kill every other
+            // active session for this user. The attacker is locked out as
+            // soon as the legit user's app makes its next refresh; the
+            // legit user just has to log in again. This is the same
+            // pattern Auth0 / RFC 6749bis-style rotation describes.
+            await _db.RefreshTokens
+                .Where(t => t.UserId == stored.UserId && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+            _audit.Record(stored.UserId, AuditKind.SessionsRevoked, "refresh-token reuse detected");
+            await _db.SaveChangesAsync(cancellationToken);
+
+            // Out-of-band heads-up so the user sees the alert even when the
+            // app silently logs them out. Best-effort; SMTP failure here
+            // must not turn into a successful refresh.
+            FireSecurityAlert(stored.User?.Email ?? string.Empty, "Refresh token reuse detected",
+                "All sessions for this account were signed out as a precaution. If this wasn't you, change your password.");
+
+            throw new AuthFailedException("Refresh token revoked");
+        }
         if (stored.ExpiresAt < DateTime.UtcNow) throw new AuthFailedException("Refresh token expired");
         if (stored.User is null) throw new AuthFailedException("Refresh token has no user");
 

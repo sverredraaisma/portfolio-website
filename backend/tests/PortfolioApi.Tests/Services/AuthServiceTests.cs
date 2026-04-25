@@ -176,6 +176,42 @@ public class AuthServiceTests
         rotated[1].RevokedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task RefreshAsync_reuse_of_an_already_revoked_token_revokes_every_other_session_for_the_user()
+    {
+        // Reuse-detection: a refresh token presented twice signals
+        // compromise. The legit user lost a race with an attacker (or
+        // vice versa) — either way we kill every other active session
+        // so the attacker is ejected as soon as the legit user's app
+        // makes its next call. Pinning this so a future regression
+        // can't silently reopen the long-lived-stolen-token window.
+        var (sut, db, email, _, _, _, _) = Build();
+        var user = await sut.RegisterAsync("alice", "alice@example.com", ClientHashOf("hunter22"));
+        user.EmailVerifiedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        // Two independent active sessions (e.g. a phone + a laptop).
+        var (raw1, _) = await sut.IssueRefreshTokenAsync(user.Id);
+        var (raw2, _) = await sut.IssueRefreshTokenAsync(user.Id);
+
+        // First refresh on token 1 is normal — token 1 rotates to a new one.
+        await sut.RefreshAsync(raw1);
+
+        // Now the attacker presents the (already rotated) raw1 again.
+        var act = async () => await sut.RefreshAsync(raw1);
+        await act.Should().ThrowAsync<AuthFailedException>();
+
+        // Every refresh token for this user is now revoked, including the
+        // freshly-issued one from the legitimate first refresh AND the
+        // unrelated session on token 2.
+        (await db.RefreshTokens.Where(t => t.UserId == user.Id && t.RevokedAt == null).AnyAsync())
+            .Should().BeFalse("reuse detection must scorch every active session for the user");
+
+        // The user gets a security-alert email so the silent logout is
+        // visible.
+        email.Alerts.Should().Contain(x => x.Action.Contains("reuse", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class RecordingEmail : IEmailService
     {
         public List<string> Verifications { get; } = new();
