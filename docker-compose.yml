@@ -65,6 +65,11 @@ services:
       # password-reset flow can't deliver to you.
       Admin__SeedUsername: ${ADMIN_USERNAME:-opperautist}
       Admin__SeedEmail:    ${ADMIN_EMAIL:-sverre@draaisma.dev}
+      # Trusted public origin used to build absolute URLs in the RSS,
+      # Atom and sitemap responses. Pinning this prevents a hostile
+      # Host header on a poll request from poisoning the links a
+      # crawler ingests.
+      Site__PublicOrigin:  ${PUBLIC_ORIGIN:-http://localhost}
     volumes:
       - backend_media:/app/media
       # Falcon-512 signing keypair, generated on first boot. Persisted so

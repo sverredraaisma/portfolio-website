@@ -76,7 +76,7 @@ public static class RssEndpoint
 
         app.MapGet("/sitemap.xml", async (HttpContext http, AppDbContext db) =>
         {
-            var origin = http.Request.Scheme + "://" + http.Request.Host;
+            var origin = OriginFor(http);
 
             var posts = await db.Posts
                 .AsNoTracking()
@@ -133,7 +133,7 @@ public static class RssEndpoint
 
         app.MapGet("/robots.txt", (HttpContext http) =>
         {
-            var origin = http.Request.Scheme + "://" + http.Request.Host;
+            var origin = OriginFor(http);
             // Permissive on the public surface; admin and account flows are
             // either gated by JS-only middleware or behind login, so excluding
             // them here is purely a hint to well-behaved crawlers.
@@ -151,11 +151,19 @@ public static class RssEndpoint
         return app;
     }
 
-    // Reconstruct the public origin from the proxy headers so the feed
-    // links work whether the site is reachable on http://localhost or
-    // https://example.com.
-    private static string OriginFor(HttpContext http) =>
-        http.Request.Scheme + "://" + http.Request.Host;
+    // Public origin used to build absolute URLs in feed bodies. Prefers a
+    // configured Site:PublicOrigin (set via env in production) so a request
+    // forged with `Host: evil.com` can't poison the links a crawler then
+    // ingests. Falls back to Scheme + Host when nothing is configured —
+    // fine in dev, where there's no untrusted forwarder.
+    private static string OriginFor(HttpContext http)
+    {
+        var configured = http.RequestServices
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<PortfolioApi.Configuration.SiteOptions>>()
+            .Value.PublicOrigin;
+        if (!string.IsNullOrEmpty(configured)) return configured.TrimEnd('/');
+        return http.Request.Scheme + "://" + http.Request.Host;
+    }
 
     private record FeedItem(Guid Id, string Title, string Slug, DateTime CreatedAt, DateTime UpdatedAt, string Author, JsonDocument Blocks);
 

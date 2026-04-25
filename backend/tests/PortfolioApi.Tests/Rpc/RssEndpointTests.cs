@@ -38,6 +38,10 @@ public class RssEndpointTests : IAsyncLifetime
                 {
                     s.AddDbContext<AppDbContext>(o => o.UseSqlite(_conn));
                     s.AddRouting();
+                    // SiteOptions left empty so OriginFor falls back to
+                    // Request.Host — matches dev behaviour and lets the
+                    // existing assertions on the rendered URLs keep working.
+                    s.AddOptions<PortfolioApi.Configuration.SiteOptions>();
                 });
                 web.Configure(app =>
                 {

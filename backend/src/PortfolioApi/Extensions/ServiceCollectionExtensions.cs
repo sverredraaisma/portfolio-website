@@ -44,6 +44,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<LocationOptions>()
             .Bind(cfg.GetSection(LocationOptions.Section));
 
+        services.AddOptions<SiteOptions>()
+            .Bind(cfg.GetSection(SiteOptions.Section));
+
         return services;
     }
 
