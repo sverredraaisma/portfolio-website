@@ -36,16 +36,21 @@ function tierFor(count: number): string {
     </div>
 
     <div v-else class="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-      <NuxtLink
-        v-for="t in tags"
-        :key="t.tag"
-        :to="{ path: '/posts', query: { tag: t.tag } }"
-        :class="['hover:underline', tierFor(t.count)]"
-        :title="`${t.count} ${t.count === 1 ? 'post' : 'posts'}`"
-      >
-        #{{ t.tag }}
-        <sup class="text-xs text-zinc-500 font-normal ml-0.5">{{ t.count }}</sup>
-      </NuxtLink>
+      <span v-for="t in tags" :key="t.tag" class="inline-flex items-baseline gap-1">
+        <NuxtLink
+          :to="{ path: '/posts', query: { tag: t.tag } }"
+          :class="['hover:underline', tierFor(t.count)]"
+          :title="`${t.count} ${t.count === 1 ? 'post' : 'posts'}`"
+        >
+          #{{ t.tag }}
+          <sup class="text-xs text-zinc-500 font-normal ml-0.5">{{ t.count }}</sup>
+        </NuxtLink>
+        <a
+          :href="`/rss/${t.tag}.xml`"
+          class="text-xs text-zinc-500 hover:text-cyan-400"
+          :title="`Subscribe to #${t.tag} (RSS)`"
+        >rss</a>
+      </span>
     </div>
   </section>
 </template>

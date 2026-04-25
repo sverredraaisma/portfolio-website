@@ -96,6 +96,16 @@ watch(() => route.query.tag, (v) => {
     refresh()
   }
 })
+
+// Feed-reader auto-discovery: when filtering by tag, expose the per-tag
+// RSS link so a "subscribe" button in the user's reader points at the
+// narrow feed instead of the whole site. The site-wide alternate stays
+// in nuxt.config.ts.
+useHead({
+  link: () => tag.value
+    ? [{ rel: 'alternate', type: 'application/rss+xml', title: `sverre.dev — #${tag.value}`, href: `/rss/${tag.value}.xml` }]
+    : []
+})
 </script>
 
 <template>

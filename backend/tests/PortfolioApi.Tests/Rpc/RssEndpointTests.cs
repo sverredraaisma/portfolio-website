@@ -112,6 +112,30 @@ public class RssEndpointTests : IAsyncLifetime
         response.Headers.CacheControl!.MaxAge.Should().Be(TimeSpan.FromHours(1));
     }
 
+    // ---- Per-tag feed -----------------------------------------------------
+
+    [Theory]
+    [InlineData("/rss/UPPER.xml")]                    // mixed case
+    [InlineData("/rss/-leading.xml")]                 // bad boundary
+    [InlineData("/rss/trailing-.xml")]                // bad boundary
+    [InlineData("/rss/has_underscore.xml")]           // disallowed char
+    [InlineData("/rss/has space.xml")]                // disallowed char
+    [InlineData("/rss/way-too-long-tag-that-exceeds-the-thirty-two-char-cap.xml")]
+    public async Task GET_rss_per_tag_returns_404_for_a_malformed_tag(string url)
+    {
+        // Fail closed on bad input rather than running an arbitrary string
+        // through the filter — same shape rule as the in-app NormaliseTags.
+        var response = await _client.GetAsync(url);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact(Skip = "EF can't translate Tags.Contains over the SQLite value-converted CSV column. The behaviour is exercised against Postgres in the e2e/manual paths; same skip rationale as PostMethodsTests.List_filters_by_tag.")]
+    public Task GET_rss_per_tag_returns_a_valid_empty_feed_when_no_post_carries_the_tag() => Task.CompletedTask;
+
+    [Fact(Skip = "EF can't translate Tags.Contains over the SQLite value-converted CSV column.")]
+    public Task GET_rss_per_tag_carries_the_same_short_cache_header_as_the_main_feed() => Task.CompletedTask;
+
     [Fact]
     public async Task GET_rss_xml_includes_an_item_description_pulled_from_the_first_text_block()
     {
