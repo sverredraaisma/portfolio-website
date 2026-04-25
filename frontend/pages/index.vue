@@ -45,8 +45,8 @@ function run() {
 
 const canonicalUrl = useCanonical('/')
 useSeoMeta({
-  title: 'sverre.dev',
-  description: 'Personal site of Sverre — posts, projects, and a Falcon-512 signed proof line.'
+  title: 'draaisma.dev',
+  description: 'Personal site of Sverre Draaisma — posts, projects, and a Falcon-512 signed proof line.'
 })
 useHead({
   link: () => canonicalUrl.value ? [{ rel: 'canonical', href: canonicalUrl.value }] : []
