@@ -200,9 +200,11 @@ public class PostMethods
             ?? throw new InvalidOperationException("Post not found");
 
         // Older = strictly smaller CreatedAt. Newer = strictly larger.
-        // Strict inequality avoids returning the post itself when two
-        // posts share a CreatedAt down to the tick (rare but possible
-        // on bulk seed scripts).
+        // Two posts at the same CreatedAt tick (DateTime tick precision is
+        // 100ns; only realistic from bulk seeds) are invisible to each
+        // other as neighbours — acceptable for a single-author site, the
+        // alternative would be Guid.CompareTo on Id which doesn't reliably
+        // translate across EF providers.
         var previous = await _db.Posts
             .AsNoTracking()
             .Where(x => x.Published && x.CreatedAt < current.CreatedAt && x.Id != current.Id)
