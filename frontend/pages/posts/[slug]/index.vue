@@ -13,8 +13,15 @@ type PostFull = {
 const route = useRoute()
 const rpc = useRpc()
 const auth = useAuthStore()
-const { data: post } = await useAsyncData<PostFull>(`post:${route.params.slug}`,
-  () => rpc.call<PostFull>('posts.get', { slug: route.params.slug }))
+// Reactive key + explicit watch so navigating /posts/a → /posts/b (same
+// component instance, different slug) actually refetches instead of
+// re-rendering the previous post.
+const slug = computed(() => String(route.params.slug ?? ''))
+const { data: post } = await useAsyncData<PostFull>(
+  () => `post:${slug.value}`,
+  () => rpc.call<PostFull>('posts.get', { slug: slug.value }),
+  { watch: [slug] }
+)
 
 // Pull a usable description out of the post body: first text block, falling
 // back to the first header. Trimmed to a sensible meta length.

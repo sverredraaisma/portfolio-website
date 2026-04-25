@@ -28,18 +28,22 @@ const rpc = useRpc()
 // should never give us anything else.
 const username = computed(() => String(route.params.username ?? '').trim())
 
-const { data: profile, error, pending } = await useAsyncData<Profile | null>(
-  `profile:${username.value}`,
+// `key` is reactive AND `watch` is set so navigating /u/alice → /u/bob (same
+// component instance, different param) actually triggers a refetch instead
+// of re-using the alice payload.
+const { data: profile, pending } = await useAsyncData<Profile | null>(
+  () => `profile:${username.value}`,
   async () => {
     if (!username.value) return null
     try {
       return await rpc.call<Profile>('users.getProfile', { username: username.value })
-    } catch (e) {
+    } catch {
       // The server returns "User not found" as a generic invalid-op error;
       // fall through so the template renders the not-found state.
       return null
     }
-  }
+  },
+  { watch: [username] }
 )
 
 useHead({
