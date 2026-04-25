@@ -37,10 +37,10 @@ public sealed class PolicyService : IPolicyService
 
     public PolicyService(ISigningService signer, IWebHostEnvironment env, ILogger<PolicyService> log)
     {
-        var path = Path.Combine(env.ContentRootPath, "Resources", "privacy-policy.txt");
+        var path = Path.Combine(env.ContentRootPath, "Resources", "privacy-policy.md");
         if (!File.Exists(path))
             throw new InvalidOperationException(
-                $"Canonical privacy policy text not found at {path}. The .csproj " +
+                $"Canonical privacy policy not found at {path}. The .csproj " +
                 "should copy Resources/** next to the assembly.");
 
         // Read with the file's native bytes — no normalisation, no BOM strip,

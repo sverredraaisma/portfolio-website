@@ -29,7 +29,7 @@ public class PolicyServiceTests : IDisposable
         NullLogger<FalconSigningService>.Instance);
 
     private void WritePolicy(string contents) =>
-        File.WriteAllText(Path.Combine(_root, "Resources", "privacy-policy.txt"), contents);
+        File.WriteAllText(Path.Combine(_root, "Resources", "privacy-policy.md"), contents);
 
     [Fact]
     public void Privacy_returns_the_text_verbatim()
