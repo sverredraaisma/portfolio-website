@@ -64,6 +64,16 @@ public class ImageService : IImageService
         input.Position = 0;
         using var image = await Image.LoadAsync(input);
 
+        // Strip ALL metadata (EXIF, XMP, ICC, IPTC). User-uploaded photos
+        // routinely carry GPS coordinates, camera serial, and timestamps —
+        // baking those into the served WebP would publish location and
+        // device fingerprints with every post image. ImageSharp preserves
+        // metadata by default; we have to clear it explicitly.
+        image.Metadata.ExifProfile = null;
+        image.Metadata.XmpProfile = null;
+        image.Metadata.IccProfile = null;
+        image.Metadata.IptcProfile = null;
+
         var fileName = $"{Guid.NewGuid():N}.webp";
         var path = Path.Combine(MediaRoot, fileName);
 

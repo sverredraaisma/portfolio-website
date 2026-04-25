@@ -5,7 +5,9 @@ using Microsoft.Extensions.Options;
 using PortfolioApi.Configuration;
 using PortfolioApi.Services;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Metadata.Profiles.Exif;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace PortfolioApi.Tests.Services;
@@ -91,6 +93,33 @@ public sealed class ImageServiceTests : IDisposable
         // The .webp file is created inside the using-image block; if the
         // decoder threw before that block ran, no file should exist.
         Directory.GetFiles(_sut.MediaRoot, "*.webp").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ConvertToWebpAsync_strips_EXIF_so_GPS_and_camera_metadata_dont_leak_to_the_public_url()
+    {
+        // Source image carries a fake GPS coordinate + camera model that
+        // would survive a naive re-encode. The output must have no
+        // EXIF profile at all (or no GPS / camera tag) — we publish
+        // these images on a public URL.
+        using var src = new Image<Rgba32>(width: 32, height: 32);
+        var exif = new ExifProfile();
+        exif.SetValue(ExifTag.Model, "SECRET-CAM-X1");
+        exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+        src.Metadata.ExifProfile = exif;
+
+        using var inMs = new MemoryStream();
+        await src.SaveAsync(inMs, new JpegEncoder());
+        inMs.Position = 0;
+
+        var url = await _sut.ConvertToWebpAsync(inMs);
+        var path = Path.Combine(_sut.MediaRoot, url["/media/".Length..]);
+        using var produced = await Image.LoadAsync(path);
+
+        // The contract is simply "no EXIF block on the served file" — we
+        // null the profile out wholesale, so checking for the cleared
+        // reference is the simplest assertion.
+        produced.Metadata.ExifProfile.Should().BeNull();
     }
 
     private sealed class TestEnv(string root) : IWebHostEnvironment
