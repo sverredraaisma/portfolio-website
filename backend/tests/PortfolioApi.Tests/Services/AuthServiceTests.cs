@@ -177,38 +177,66 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_reuse_of_an_already_revoked_token_revokes_every_other_session_for_the_user()
+    public async Task RefreshAsync_immediate_re_present_within_the_grace_window_is_benign_no_scorch()
     {
-        // Reuse-detection: a refresh token presented twice signals
-        // compromise. The legit user lost a race with an attacker (or
-        // vice versa) — either way we kill every other active session
-        // so the attacker is ejected as soon as the legit user's app
-        // makes its next call. Pinning this so a future regression
-        // can't silently reopen the long-lived-stolen-token window.
+        // Cross-tab race: two tabs share the same refresh token in
+        // localStorage; both 401 at the same instant; both try to refresh.
+        // The fast one rotates; the slow one follows up milliseconds later
+        // with the now-revoked raw. We can't reissue tokens for the slow
+        // tab (we don't know its successor) but we MUST NOT treat this as
+        // a compromise and scorch every session — that would force-logout
+        // the user across all their devices for benign concurrency.
         var (sut, db, email, _, _, _, _) = Build();
         var user = await sut.RegisterAsync("alice", "alice@example.com", ClientHashOf("hunter22"));
         user.EmailVerifiedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        // Two independent active sessions (e.g. a phone + a laptop).
         var (raw1, _) = await sut.IssueRefreshTokenAsync(user.Id);
         var (raw2, _) = await sut.IssueRefreshTokenAsync(user.Id);
+        await sut.RefreshAsync(raw1); // tab 1 wins the race
 
-        // First refresh on token 1 is normal — token 1 rotates to a new one.
+        var act = async () => await sut.RefreshAsync(raw1); // tab 2 follows up
+        await act.Should().ThrowAsync<AuthFailedException>();
+
+        // The successor from tab 1's rotation AND the unrelated raw2
+        // session must both still be alive — the slow follower is benign.
+        var stillActive = await db.RefreshTokens
+            .Where(t => t.UserId == user.Id && t.RevokedAt == null)
+            .CountAsync();
+        stillActive.Should().Be(2);
+        email.Alerts.Should().NotContain(x => x.Action.Contains("reuse", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_reuse_after_the_grace_window_revokes_every_session()
+    {
+        // The compromise path. A refresh token is rotated, time passes,
+        // then the same raw token resurfaces — too long after rotation to
+        // be a slow tab. Treat as a stolen-token reuse and scorch every
+        // active session for the user; alert them out-of-band.
+        var (sut, db, email, _, _, _, _) = Build();
+        var user = await sut.RegisterAsync("alice", "alice@example.com", ClientHashOf("hunter22"));
+        user.EmailVerifiedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var (raw1, _) = await sut.IssueRefreshTokenAsync(user.Id);
+        var (raw2, _) = await sut.IssueRefreshTokenAsync(user.Id);
         await sut.RefreshAsync(raw1);
 
-        // Now the attacker presents the (already rotated) raw1 again.
+        // Force the rotated row's RevokedAt past the grace window without
+        // waiting in real time.
+        var rotatedRow = await db.RefreshTokens
+            .Where(t => t.UserId == user.Id && t.RevokedAt != null)
+            .OrderBy(t => t.CreatedAt)
+            .FirstAsync();
+        rotatedRow.RevokedAt = DateTime.UtcNow.AddMinutes(-5);
+        await db.SaveChangesAsync();
+
         var act = async () => await sut.RefreshAsync(raw1);
         await act.Should().ThrowAsync<AuthFailedException>();
 
-        // Every refresh token for this user is now revoked, including the
-        // freshly-issued one from the legitimate first refresh AND the
-        // unrelated session on token 2.
         (await db.RefreshTokens.Where(t => t.UserId == user.Id && t.RevokedAt == null).AnyAsync())
-            .Should().BeFalse("reuse detection must scorch every active session for the user");
-
-        // The user gets a security-alert email so the silent logout is
-        // visible.
+            .Should().BeFalse("compromise path must scorch every active session");
         email.Alerts.Should().Contain(x => x.Action.Contains("reuse", StringComparison.OrdinalIgnoreCase));
     }
 

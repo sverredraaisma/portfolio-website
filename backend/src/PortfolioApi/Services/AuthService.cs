@@ -517,25 +517,42 @@ public class AuthService : IAuthService
 
         if (stored.RevokedAt is not null)
         {
-            // Reuse detection. A refresh token that was already rotated is
-            // being presented again — either the legit user lost the race
-            // with an attacker who stole the token, or vice versa. Either
-            // way it's a strong compromise signal, so we kill every other
-            // active session for this user. The attacker is locked out as
-            // soon as the legit user's app makes its next refresh; the
-            // legit user just has to log in again. This is the same
-            // pattern Auth0 / RFC 6749bis-style rotation describes.
-            await _db.RefreshTokens
-                .Where(t => t.UserId == stored.UserId && t.RevokedAt == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
-            _audit.Record(stored.UserId, AuditKind.SessionsRevoked, "refresh-token reuse detected");
-            await _db.SaveChangesAsync(cancellationToken);
+            // A refresh token presented after rotation is one of two things:
+            //
+            //   1. A benign cross-tab race. Two tabs share the same refresh
+            //      token in localStorage; both 401, both try to refresh.
+            //      The fast one rotates the token; the slow one follows up
+            //      milliseconds later with the now-revoked raw. We can't
+            //      issue this caller new tokens (we don't know which
+            //      successor to hand them) but treating it as compromise
+            //      and scorching every session is too aggressive.
+            //
+            //   2. A real reuse — someone stole the token and presented it
+            //      after the legit user (or attacker) rotated. Detected
+            //      whenever the revocation is OLDER than the grace window:
+            //      a slow tab couldn't possibly take that long to follow
+            //      up, so this is the compromise path described in RFC
+            //      6749bis / Auth0's rotation guidance.
+            //
+            // 30 seconds is loose enough for any real network hiccup but
+            // tight enough that a stolen token can't ride along for long
+            // before the next legit refresh trips the scorch.
+            var grace = TimeSpan.FromSeconds(30);
+            var revokedLongAgo = stored.RevokedAt.Value < DateTime.UtcNow - grace;
+            if (revokedLongAgo)
+            {
+                await _db.RefreshTokens
+                    .Where(t => t.UserId == stored.UserId && t.RevokedAt == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTime.UtcNow), cancellationToken);
+                _audit.Record(stored.UserId, AuditKind.SessionsRevoked, "refresh-token reuse detected");
+                await _db.SaveChangesAsync(cancellationToken);
 
-            // Out-of-band heads-up so the user sees the alert even when the
-            // app silently logs them out. Best-effort; SMTP failure here
-            // must not turn into a successful refresh.
-            FireSecurityAlert(stored.User?.Email ?? string.Empty, "Refresh token reuse detected",
-                "All sessions for this account were signed out as a precaution. If this wasn't you, change your password.");
+                // Out-of-band heads-up so the user sees the alert even when
+                // the app silently logs them out. Best-effort; SMTP failure
+                // here must not turn into a successful refresh.
+                FireSecurityAlert(stored.User?.Email ?? string.Empty, "Refresh token reuse detected",
+                    "All sessions for this account were signed out as a precaution. If this wasn't you, change your password.");
+            }
 
             throw new AuthFailedException("Refresh token revoked");
         }
