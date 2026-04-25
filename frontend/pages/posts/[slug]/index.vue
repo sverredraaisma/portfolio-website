@@ -46,13 +46,53 @@ function description(blocks: Block[] | undefined): string {
 
 const readMinutes = computed(() => readingTimeMinutes(post.value?.blocks?.blocks))
 
+// canonical URL: built from the request origin so it matches whichever
+// hostname the page was actually served from (localhost in dev,
+// sverre.dev in prod). Falls back to a same-origin path when the origin
+// isn't available (no SSR event yet on the client).
+const canonicalUrl = computed(() => {
+  if (!post.value) return undefined
+  const path = `/posts/${post.value.slug}`
+  if (import.meta.server) {
+    const event = useRequestEvent()
+    if (event) {
+      const proto = event.node.req.headers['x-forwarded-proto'] || 'http'
+      const host = event.node.req.headers.host
+      if (host) return `${proto}://${host}${path}`
+    }
+  } else if (typeof window !== 'undefined') {
+    return `${window.location.origin}${path}`
+  }
+  return path
+})
+
 useSeoMeta({
   title: () => post.value?.title,
   description: () => description(post.value?.blocks?.blocks),
   ogTitle: () => post.value?.title,
   ogDescription: () => description(post.value?.blocks?.blocks),
-  ogType: 'article'
+  ogType: 'article',
+  ogUrl: () => canonicalUrl.value
 })
+
+useHead({
+  link: () => canonicalUrl.value
+    ? [{ rel: 'canonical', href: canonicalUrl.value }]
+    : []
+})
+
+// ---- Copy permalink -------------------------------------------------------
+const linkCopied = ref(false)
+async function copyPermalink() {
+  if (!canonicalUrl.value) return
+  try {
+    await navigator.clipboard.writeText(canonicalUrl.value)
+    linkCopied.value = true
+    setTimeout(() => { linkCopied.value = false }, 1500)
+  } catch {
+    toast.error('Could not copy to clipboard.')
+  }
+}
 
 // ---- Bookmark state -------------------------------------------------------
 // Bookmarking is auth-only — the backend rejects anonymous toggle, so we
@@ -113,6 +153,11 @@ watch(
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          @click="copyPermalink"
+          class="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:border-cyan-700 text-zinc-400 hover:text-cyan-400 transition"
+          title="Copy permalink"
+        >{{ linkCopied ? '✓ copied' : '🔗 copy link' }}</button>
         <button
           v-if="auth.isAuthenticated"
           :disabled="bookmarkBusy"
