@@ -122,12 +122,19 @@ public class CommentMethods
             .Where(x => x.Id == p.PostId)
             .Select(x => new
             {
+                x.Published,
                 x.Title,
                 x.Slug,
                 Author = new { x.Author!.Id, x.Author.Email, x.Author.NotifyOnComment, EmailVerified = x.Author.EmailVerifiedAt != null }
             })
             .FirstOrDefaultAsync(ctx.CancellationToken)
             ?? throw new InvalidOperationException("Post not found");
+
+        // Same shape as posts.get's draft gate: a draft is only addressable
+        // by its author. Anyone else gets the same "Post not found" wire
+        // shape so the post's existence isn't disclosed via this endpoint.
+        if (!post.Published && post.Author.Id != userId)
+            throw new InvalidOperationException("Post not found");
 
         var c = new Comment { PostId = p.PostId, AuthorId = userId, Body = body };
         _db.Comments.Add(c);

@@ -111,6 +111,47 @@ public class CommentMethodsTests
     }
 
     [Fact]
+    public async Task Create_refuses_a_non_author_comment_on_a_draft_post()
+    {
+        // Symmetric with comments.list: a non-author who knows the postId
+        // of a draft must not be able to write into its thread either.
+        // The wire shape matches posts.get's not-found response so the
+        // post's existence isn't disclosed.
+        var (sut, db, _, other, post, _) = Setup();
+        var live = await db.Posts.SingleAsync(p => p.Id == post.Id);
+        live.Published = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var act = async () => await sut.Create(
+            new CreateCommentParams { PostId = post.Id, Body = "leaks?" },
+            TestRpcContext.User(other.Id));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Post not found");
+        (await db.Comments.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Create_lets_the_author_comment_on_their_own_draft_for_editor_preview_use()
+    {
+        // The author's editor flow may want to round-trip a comment to
+        // exercise the rendering — the draft gate exempts them so the
+        // preview path keeps working.
+        var (sut, db, author, _, post, _) = Setup();
+        var live = await db.Posts.SingleAsync(p => p.Id == post.Id);
+        live.Published = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var dto = await sut.Create(
+            new CreateCommentParams { PostId = post.Id, Body = "preview" },
+            TestRpcContext.User(author.Id));
+
+        dto.Body.Should().Be("preview");
+        (await db.Comments.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task List_hides_comments_on_unpublished_posts_so_drafts_dont_leak_via_postId()
     {
         // posts.get already 404s an unpublished post for non-authors —
