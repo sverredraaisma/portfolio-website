@@ -11,11 +11,18 @@ namespace PortfolioApi.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Backfill existing rows with an empty array so the NOT NULL
+            // ADD COLUMN doesn't reject the table on a populated DB
+            // (Postgres 23502: "column 'Tags' contains null values").
+            // EF didn't emit a default for the text[] mapping by default,
+            // hand-supply one. New rows will overwrite this when the user
+            // sets Tags via posts.create / posts.update.
             migrationBuilder.AddColumn<List<string>>(
                 name: "Tags",
                 table: "Posts",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValue: new List<string>());
 
             migrationBuilder.CreateIndex(
                 name: "IX_Posts_Tags",
