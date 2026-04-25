@@ -9,6 +9,16 @@ const config = useRuntimeConfig()
 const uploading = ref(false)
 const error = ref('')
 
+// Mirror the backend cap (PostMethods.MaxImageRawBytes) so the user
+// finds out *before* the base64-encode + upload round trip. The
+// backend re-checks; this is a UX preflight only.
+const MAX_RAW_BYTES = 6 * 1024 * 1024
+
+// Formats the backend (ImageSharp) actually decodes. Listing the MIME
+// types explicitly excludes SVG, which `image/*` would otherwise allow
+// in some browsers — and SVG would be rejected at the server.
+const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp,image/tiff'
+
 function setAlt(v: string) {
   emit('update', { ...props.block, data: { ...props.block.data, alt: v } })
 }
@@ -16,8 +26,13 @@ function setAlt(v: string) {
 async function onPick(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
-  uploading.value = true
   error.value = ''
+  if (file.size > MAX_RAW_BYTES) {
+    const mb = (MAX_RAW_BYTES / 1024 / 1024).toFixed(0)
+    error.value = `Image is too large (max ${mb} MiB).`
+    return
+  }
+  uploading.value = true
   try {
     const dataBase64 = await toBase64(file)
     const res = await rpc.call<{ url: string }>('posts.uploadImage', { dataBase64 })
@@ -51,7 +66,7 @@ const previewSrc = computed(() =>
 
 <template>
   <div class="space-y-2">
-    <input type="file" accept="image/*" @change="onPick" class="text-sm" />
+    <input type="file" :accept="ACCEPT" @change="onPick" class="text-sm" />
     <p v-if="uploading" class="text-xs text-zinc-500">uploading & converting to webp...</p>
     <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
     <img v-if="block.data.src" :src="previewSrc" class="max-h-48 rounded border border-zinc-300 dark:border-zinc-800" />
