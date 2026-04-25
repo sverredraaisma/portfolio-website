@@ -301,10 +301,20 @@ public class PostMethods
         if (blocksRaw.Length > MaxBlocksDocBytes)
             throw new InvalidOperationException($"blocks document exceeds {MaxBlocksDocBytes} bytes");
 
+        var slug = NormaliseSlug(NonNull(p.Slug, "slug", 200));
+        // Pre-check for slug collisions so the user gets a clear "already in
+        // use" error instead of the raw Postgres unique-violation surfacing
+        // as a generic 500 ("Internal server error"). TOCTOU window is
+        // negligible at admin-only / single-author cardinality; even if two
+        // simultaneous creates raced, the loser would just hit the same
+        // generic 500 we used to always return.
+        if (await _db.Posts.AsNoTracking().AnyAsync(x => x.Slug == slug, ctx.CancellationToken))
+            throw new InvalidOperationException($"slug '{slug}' is already in use");
+
         var post = new Post
         {
             Title = NonNull(p.Title, "title", 200),
-            Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200)),
+            Slug = slug,
             Blocks = JsonDocument.Parse(blocksRaw),
             Published = p.Published,
             AuthorId = userId,
@@ -336,7 +346,18 @@ public class PostMethods
         // sitemap, which would mislead subscribers and crawlers.
         var contentChanged = false;
         if (p.Title is not null) { post.Title = NonNull(p.Title, "title", 200); contentChanged = true; }
-        if (p.Slug is not null) { post.Slug = NormaliseSlug(NonNull(p.Slug, "slug", 200)); contentChanged = true; }
+        if (p.Slug is not null)
+        {
+            var slug = NormaliseSlug(NonNull(p.Slug, "slug", 200));
+            // Same friendly check as Create — but exclude this post's own
+            // row so a no-op slug update (or a slug-normalisation that
+            // happens to produce the existing value) doesn't false-positive.
+            if (slug != post.Slug
+                && await _db.Posts.AsNoTracking().AnyAsync(x => x.Slug == slug && x.Id != post.Id, ctx.CancellationToken))
+                throw new InvalidOperationException($"slug '{slug}' is already in use");
+            post.Slug = slug;
+            contentChanged = true;
+        }
         if (p.Blocks is { } blocks)
         {
             var raw = blocks.GetRawText();

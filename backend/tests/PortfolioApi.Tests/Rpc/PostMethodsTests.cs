@@ -489,6 +489,63 @@ public class PostMethodsTests
     }
 
     [Fact]
+    public async Task Create_rejects_a_duplicate_slug_with_a_clear_message()
+    {
+        // Without the pre-check, the second create would surface the raw
+        // EF/Postgres unique-violation as a generic 500. Pin the friendly
+        // 400-shape message instead.
+        var (sut, _, admin, _) = Setup();
+        await sut.Create(new CreatePostParams { Title = "t", Slug = "hello", Blocks = Blocks() },
+            TestRpcContext.Admin(admin.Id));
+
+        var act = async () => await sut.Create(new CreatePostParams
+        {
+            Title = "second",
+            Slug = "Hello",
+            Blocks = Blocks()
+        }, TestRpcContext.Admin(admin.Id));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*hello*already in use*");
+    }
+
+    [Fact]
+    public async Task Update_rejects_a_slug_already_used_by_another_post()
+    {
+        var (sut, _, admin, _) = Setup();
+        await sut.Create(new CreatePostParams { Title = "first",  Slug = "first",  Blocks = Blocks() },
+            TestRpcContext.Admin(admin.Id));
+        var second = await sut.Create(new CreatePostParams { Title = "second", Slug = "second", Blocks = Blocks() },
+            TestRpcContext.Admin(admin.Id));
+
+        var act = async () => await sut.Update(new UpdatePostParams
+        {
+            Id = second.Id,
+            Slug = "first"
+        }, TestRpcContext.Admin(admin.Id));
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*first*already in use*");
+    }
+
+    [Fact]
+    public async Task Update_allows_setting_the_slug_to_the_same_value_it_already_has()
+    {
+        // No-op slug update (or a save that re-normalises to the existing
+        // value) shouldn't false-positive the collision check against the
+        // post's own row.
+        var (sut, _, admin, _) = Setup();
+        var created = await sut.Create(new CreatePostParams { Title = "t", Slug = "alpha", Blocks = Blocks() },
+            TestRpcContext.Admin(admin.Id));
+
+        var act = async () => await sut.Update(new UpdatePostParams
+        {
+            Id = created.Id,
+            Slug = "alpha"
+        }, TestRpcContext.Admin(admin.Id));
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task Delete_rejects_non_owner_admin()
     {
         // An admin can only delete posts they authored — a second admin is
