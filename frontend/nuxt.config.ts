@@ -1,14 +1,10 @@
-// Permissive CSP that matches what nginx emits (see nginx/nginx.conf).
-// Keep these in lock-step: the browser intersects every CSP header it
-// receives, so a stricter Nitro default would shadow nginx's
-// 'unsafe-inline' allowances and break inline scripts/styles (Nuxt's
-// SSR hydration payload + the pre-hydration theme script are inline,
-// and Vue scoped styles get inlined too).
-//
-// Nuxt 3.16+ / Nitro 2.13+ ship a strict default
-// (default-src 'self') on HTML responses. Without this override the
-// intersection of Nitro's default and nginx's permissive header
-// blocks every inline tag in the served HTML.
+// Defence-in-depth CSP for dev-mode runs (`pnpm run dev`) where no nginx
+// sits in front. In production the authoritative copy is nginx/nginx.conf
+// — keep the two in lock-step. The browser intersects every CSP header it
+// receives, so identical permissive headers from Nuxt and nginx intersect
+// to themselves and inline content loads. If they ever drift, the stricter
+// of the two wins and breaks Nuxt's SSR hydration <script>, the
+// pre-hydration theme script, and Vue scoped <style> blocks.
 const CSP =
   "default-src 'self'; " +
   "script-src 'self' 'unsafe-inline'; " +

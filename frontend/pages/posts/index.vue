@@ -49,23 +49,35 @@ if (initial.value) {
   hasMore.value = initial.value.hasMore
 }
 
+// Monotonically increasing token: only the most recent refresh() may write
+// back to state. Without this, fast typing can leave the older (slower)
+// response winning the race and the list desyncs from the search box.
+let refreshSeq = 0
 async function refresh() {
+  const mySeq = ++refreshSeq
   loading.value = true
   try {
     const res = await rpc.call<PostsPage>('posts.list', requestParams(1))
+    if (mySeq !== refreshSeq) return
     posts.value = res.items
     page.value = res.page
     hasMore.value = res.hasMore
   } finally {
-    loading.value = false
+    if (mySeq === refreshSeq) loading.value = false
   }
 }
 
 async function loadMore() {
   if (loadingMore.value || !hasMore.value) return
+  // Snapshot the refresh seq when this request started; if a refresh
+  // happens while we're awaiting, the snapshot won't match and we drop
+  // the response so we don't append page-2 of the *old* filter onto
+  // page-1 of the *new* filter.
+  const mySeq = refreshSeq
   loadingMore.value = true
   try {
     const next = await rpc.call<PostsPage>('posts.list', requestParams(page.value + 1))
+    if (mySeq !== refreshSeq) return
     posts.value = [...posts.value, ...next.items]
     page.value = next.page
     hasMore.value = next.hasMore
@@ -74,7 +86,9 @@ async function loadMore() {
   }
 }
 
-// Debounced URL + fetch when the search box changes.
+// Debounced URL + fetch when the search box changes. onScopeDispose so
+// navigating away mid-debounce doesn't fire a router.replace + refresh on
+// an unmounted component.
 let debounce: ReturnType<typeof setTimeout> | null = null
 watch(q, (v) => {
   if (debounce) clearTimeout(debounce)
@@ -83,6 +97,7 @@ watch(q, (v) => {
     refresh()
   }, 200)
 })
+onScopeDispose(() => { if (debounce) clearTimeout(debounce) })
 
 function clearTag() {
   tag.value = ''
@@ -90,13 +105,23 @@ function clearTag() {
   refresh()
 }
 
-// React to back/forward swapping tag in the URL.
-watch(() => route.query.tag, (v) => {
-  const s = String(v ?? '')
-  if (s !== tag.value) {
-    tag.value = s
-    refresh()
+// React to back/forward swapping query params in the URL. Watch tag AND
+// q so the local refs stay in lock-step with whatever the user navigated
+// to (otherwise the search box can show stale text after a back-button).
+watch(() => [route.query.tag, route.query.q], ([nextTag, nextQ]) => {
+  const tStr = String(nextTag ?? '')
+  const qStr = String(nextQ ?? '')
+  let changed = false
+  if (tStr !== tag.value) { tag.value = tStr; changed = true }
+  if (qStr !== q.value) {
+    q.value = qStr
+    // q's own watcher already fires refresh on debounce; cancel the
+    // pending one and let this watcher own the refresh below so we
+    // don't fire two requests for one navigation.
+    if (debounce) { clearTimeout(debounce); debounce = null }
+    changed = true
   }
+  if (changed) refresh()
 })
 
 // Canonical: search engines should consolidate /posts, /posts?q=foo
