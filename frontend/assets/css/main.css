@@ -61,10 +61,11 @@
   .dark .crt::before {
     background: repeating-linear-gradient(
       to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 2px,
-      rgba(0,0,0,0.18) 3px
+      rgba(0,255,255,0) 0px,
+      rgba(0,255,255,0) 2px,
+      rgba(0,255,255,0.18) 3px
     );
+    mix-blend-mode: normal;
   }
   .crt::after {
     content: '';
@@ -73,7 +74,7 @@
     pointer-events: none;
   }
   .dark .crt::after {
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,255,255,0.1) 100%);
   }
   .blink {
     animation: blink 1.1s steps(1) infinite;

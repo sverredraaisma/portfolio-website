@@ -5,7 +5,7 @@ const lines = [
   'BOOTING SVERRE.OS v1.0...',
   'LOADING PERSONALITY MODULE..............[ OK ]',
   'INITIALISING PROJECT INDEX..............[ OK ]',
-  'WARMING UP COFFEE SUBSYSTEM.............[ OK ]',
+  'RESUPPLYING WHITE MONSTER RESERVES......[ OK ]',
   '',
   'WELCOME, GUEST.',
   '',
@@ -36,7 +36,7 @@ function run() {
     case 'random':  router.push('/posts/random'); break
     case 'verify':  router.push('/verify-statement'); break
     case 'privacy': router.push('/privacy'); break
-    case 'about':   shown.value.push('> Hi, I build things. Frontends, backends, the occasional bad joke.'); break
+    case 'about':   shown.value.push('> Hi, I make things. Software, hardware, mistakes.'); break
     case 'help':    shown.value.push(HELP); break
     case 'clear':   shown.value = []; break
     default:        shown.value.push(`> command not found: ${c}. type 'help'.`)
