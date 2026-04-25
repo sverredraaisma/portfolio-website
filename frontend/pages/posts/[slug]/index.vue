@@ -3,7 +3,7 @@ import type { Block, PostDocument } from '~/types/blocks'
 import BlockRenderer from '~/components/BlockRenderer.vue'
 import TerminalComments from '~/components/TerminalComments.vue'
 import { formatTime } from '~/composables/useDate'
-import { readingTimeMinutes } from '~/composables/useReadingTime'
+import { readingStats } from '~/composables/useReadingTime'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 
@@ -44,7 +44,7 @@ function description(blocks: Block[] | undefined): string {
   return header?.data.text ?? ''
 }
 
-const readMinutes = computed(() => readingTimeMinutes(post.value?.blocks?.blocks))
+const stats = computed(() => readingStats(post.value?.blocks?.blocks))
 
 import { useCanonical } from '~/composables/useCanonical'
 const canonicalUrl = useCanonical(() => post.value ? `/posts/${post.value.slug}` : undefined)
@@ -132,7 +132,7 @@ watch(
         <div class="text-xs text-zinc-500 mt-1">
           {{ formatTime(post.createdAt) }} ·
           <NuxtLink :to="`/u/${post.author}`" class="hover:underline text-zinc-500 hover:text-cyan-500">{{ post.author }}</NuxtLink>
-          · ~{{ readMinutes }} min read
+          · ~{{ stats.minutes }} min read · {{ stats.words.toLocaleString() }} words
         </div>
       </div>
       <div class="flex items-center gap-2">
