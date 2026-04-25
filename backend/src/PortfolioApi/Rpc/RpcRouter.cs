@@ -42,7 +42,7 @@ public class RpcRouter
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.Ordinal);
     private readonly ILogger<RpcRouter> _log;
 
-    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, LocationMethods locations, UserMethods users, BookmarkMethods bookmarks, ILogger<RpcRouter> log)
+    public RpcRouter(AuthMethods auth, PostMethods posts, CommentMethods comments, SigningMethods signing, AccountMethods accounts, LocationMethods locations, UserMethods users, BookmarkMethods bookmarks, PolicyMethods policy, ILogger<RpcRouter> log)
     {
         _log = log;
 
@@ -90,6 +90,9 @@ public class RpcRouter
         Register("comments.create", RpcHandlers.Typed<CreateCommentParams, CommentDto>(comments.Create));
         Register("comments.update", RpcHandlers.Typed<UpdateCommentParams, CommentDto>(comments.Update));
         Register("comments.delete", RpcHandlers.Typed<DeleteCommentParams, OkResult>(comments.Delete));
+
+        // Site-policy snapshots (signed for offline proof)
+        Register("policy.privacy", RpcHandlers.Typed<PolicySnapshotDto>(policy.Privacy));
 
         // Signing (Falcon-512 PQC)
         Register("signing.publicKey", RpcHandlers.Typed<PublicKeyDto>(signing.PublicKey));

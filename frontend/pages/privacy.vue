@@ -4,9 +4,81 @@ useSeoMeta({
   description: 'How this site collects, uses, and protects your personal data, and how to exercise your rights under the AVG / GDPR.'
 })
 
-// Bumped when material changes are made; visitors can see at a glance whether
-// the policy they previously read still applies.
-const lastUpdated = '2026-04-24'
+type PolicySnapshot = {
+  subject: string
+  text: string
+  lastUpdated: string
+  algorithm: string
+  signatureBase64: string
+  publicKeyBase64: string
+  publicKeyFingerprint: string
+}
+
+const rpc = useRpc()
+
+// Fetch the canonical signed snapshot via SSR so the page (and any "View
+// Source" save) already includes the signature. The cached server-side
+// signature is byte-stable across visitors, so two readers who save on the
+// same day get the same signature bytes — which makes "I saved this on
+// date X" claims unambiguous.
+const { data: snapshot } = await useAsyncData<PolicySnapshot>(
+  'policy:privacy',
+  () => rpc.call<PolicySnapshot>('policy.privacy')
+)
+
+// "Last updated" mirror for the human-readable header. Falls back to a
+// hard-coded date if the snapshot fetch failed (network blip during SSR);
+// the canonical signed text below is the source of truth.
+const lastUpdated = computed(() => snapshot.value?.lastUpdated ?? '2026-04-24')
+
+const sig = computed(() => snapshot.value?.signatureBase64 ?? '')
+const sigShort = computed(() => sig.value
+  ? sig.value.slice(0, 24) + '…' + sig.value.slice(-12)
+  : '')
+
+const copyState = ref<'idle' | 'copied' | 'error'>('idle')
+async function copySignature() {
+  if (!sig.value) return
+  try {
+    await navigator.clipboard.writeText(sig.value)
+    copyState.value = 'copied'
+    setTimeout(() => { if (copyState.value === 'copied') copyState.value = 'idle' }, 1500)
+  } catch {
+    copyState.value = 'error'
+  }
+}
+
+// Build a self-contained JSON proof bundle and trigger a download. The
+// shape mirrors what /verify-statement already accepts so a saver can
+// paste `text` and `signatureBase64` straight in. Including the public
+// key + fingerprint makes the bundle verifiable offline against any key
+// the saver later wants to anchor to.
+function downloadSnapshot() {
+  if (!snapshot.value) return
+  const bundle = {
+    site: 'sverre.dev',
+    subject: snapshot.value.subject,
+    lastUpdated: snapshot.value.lastUpdated,
+    savedAt: new Date().toISOString(),
+    text: snapshot.value.text,
+    algorithm: snapshot.value.algorithm,
+    publicKeyBase64: snapshot.value.publicKeyBase64,
+    publicKeyFingerprint: snapshot.value.publicKeyFingerprint,
+    signatureBase64: snapshot.value.signatureBase64
+  }
+  const json = JSON.stringify(bundle, null, 2)
+  // Memory-only Blob URL; revoke after click so a screen reader navigating
+  // back to the page doesn't accumulate them.
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `sverre.dev-privacy-${snapshot.value.lastUpdated}.json`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
@@ -144,6 +216,52 @@ const lastUpdated = '2026-04-24'
         If a change affects your rights, the controller will reach out via the email address
         on file before the change takes effect.
       </p>
+    </section>
+
+    <section v-if="snapshot" class="mt-10 border-t border-zinc-800 pt-6 space-y-3">
+      <h2 class="text-lg text-cyan-400">8. Verifiable snapshot</h2>
+      <p>
+        Below is the canonical plain-text version of this policy along with a Falcon-512
+        signature over those exact bytes. Save the snapshot if you want a portable proof
+        that the site published this text on this date — anyone (including you, in the
+        future) can paste the text and signature into the
+        <NuxtLink to="/verify-statement" class="hover:text-cyan-400 underline">verify page</NuxtLink>
+        to confirm the site signed it.
+      </p>
+
+      <details class="border border-zinc-800 rounded">
+        <summary class="cursor-pointer px-3 py-2 text-xs text-zinc-400 hover:text-cyan-400 select-none">
+          show canonical text ({{ snapshot.text.length }} chars) — the bytes the signature attests to
+        </summary>
+        <pre class="text-xs p-3 overflow-auto whitespace-pre-wrap font-mono text-zinc-300 max-h-96">{{ snapshot.text }}</pre>
+      </details>
+
+      <dl class="text-xs grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 font-mono text-zinc-400">
+        <dt class="text-zinc-500">last-updated</dt><dd>{{ snapshot.lastUpdated }}</dd>
+        <dt class="text-zinc-500">algorithm</dt><dd>{{ snapshot.algorithm }}</dd>
+        <dt class="text-zinc-500">key fingerprint</dt><dd class="break-all">{{ snapshot.publicKeyFingerprint }}</dd>
+        <dt class="text-zinc-500">signature</dt>
+        <dd class="break-all">
+          <span class="text-zinc-300">{{ sigShort }}</span>
+          <button
+            type="button"
+            @click="copySignature"
+            class="ml-2 text-cyan-500 hover:text-cyan-400 underline"
+          >{{ copyState === 'copied' ? 'copied' : copyState === 'error' ? 'copy failed' : 'copy full' }}</button>
+        </dd>
+      </dl>
+
+      <div class="flex flex-wrap gap-3 text-xs pt-2">
+        <button
+          type="button"
+          @click="downloadSnapshot"
+          class="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded"
+        >Download signed snapshot (.json)</button>
+        <NuxtLink
+          to="/verify-statement"
+          class="px-3 py-1.5 border border-zinc-700 hover:border-cyan-700 rounded text-zinc-300 hover:text-cyan-400"
+        >Verify a saved snapshot →</NuxtLink>
+      </div>
     </section>
   </article>
 </template>

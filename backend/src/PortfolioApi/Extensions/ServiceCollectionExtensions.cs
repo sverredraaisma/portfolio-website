@@ -61,6 +61,10 @@ public static class ServiceCollectionExtensions
         // Singleton: the Falcon keypair is loaded once on first use; subsequent
         // signs/verifies share the same parameters.
         services.AddSingleton<ISigningService, FalconSigningService>();
+        // Singleton: the canonical privacy policy is loaded once at startup
+        // and signed once. Repeat visitors get the byte-identical signature
+        // so a saved snapshot stays comparable across page loads.
+        services.AddSingleton<IPolicyService, PolicyService>();
         services.AddSingleton<ITotpService, TotpService>();
         // Singleton: per-username failure counter is process-wide state.
         services.AddSingleton<ILoginThrottle, LoginThrottle>();
@@ -112,6 +116,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<LocationMethods>();
         services.AddScoped<UserMethods>();
         services.AddScoped<BookmarkMethods>();
+        services.AddScoped<PolicyMethods>();
 
         return services;
     }

@@ -61,6 +61,16 @@ The site holds a Falcon-512 (NIST PQC) keypair generated on first boot at `backe
 
 On-disk format is PKCS#8 / SubjectPublicKeyInfo (via `Pqc*Factory`) so files survive BouncyCastle version bumps. Wire format is the raw 896-byte Falcon-512 public key. **Never** read or copy `keys/falcon.priv` outside the backend container.
 
+### Site policy snapshots
+The privacy policy at `/privacy` is signed and downloadable as proof of what the site committed to on a given date. The flow has two sources of truth that **must** stay in sync when the policy text changes:
+
+- `backend/src/PortfolioApi/Resources/privacy-policy.txt` — the canonical plain text. Must contain a `Last-Updated: YYYY-MM-DD` header line. The signing service signs these exact bytes at startup and caches the signature for the process lifetime.
+- `frontend/pages/privacy.vue` — the rich HTML rendering. The page also fetches the canonical text via `policy.privacy` and shows it in a `<details>` block at the bottom, so visitors can see what was signed.
+
+When the policy changes: edit both files, bump `Last-Updated:` in the .txt file. Restart the backend so the cached signature regenerates.
+
+RPC: `policy.privacy` (public) returns `{ subject, text, lastUpdated, algorithm, signatureBase64, publicKeyBase64, publicKeyFingerprint }`. The frontend's "Download signed snapshot" button bundles this into a JSON file the visitor can later re-verify at `/verify-statement`.
+
 ## Running locally
 
 Full stack (everything behind nginx on `http://localhost`):
