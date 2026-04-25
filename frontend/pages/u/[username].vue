@@ -54,10 +54,13 @@ if (!profile.value) {
   if (event) setResponseStatus(event, 404)
 }
 
+// Function form so the title + noindex meta track the current profile
+// across client-side navigation. Without this, going /u/alice → /u/missing
+// (same component instance, refetched data) would keep the alice title
+// and skip the noindex on the now-404 page.
 useHead({
-  title: profile.value ? `${profile.value.username} — profile` : 'profile not found',
-  // No-index the not-found state too — the page is a real route, just empty.
-  meta: profile.value ? [] : [{ name: 'robots', content: 'noindex' }]
+  title: () => profile.value ? `${profile.value.username} — profile` : 'profile not found',
+  meta: () => profile.value ? [] : [{ name: 'robots', content: 'noindex' }]
 })
 
 // One-line preview of a comment body for the strip on a profile. We don't

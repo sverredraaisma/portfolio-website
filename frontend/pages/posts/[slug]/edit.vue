@@ -32,9 +32,16 @@ const saving = ref(false)
 const deleting = ref(false)
 const error = ref('')
 
-onMounted(async () => {
+// Loaded on mount AND on every slug change — without the watcher,
+// navigating /posts/a/edit → /posts/b/edit (same component instance,
+// different param) re-renders post a's draft, which would let an admin
+// publish a body under the wrong slug. Same fix family as /u/[username]
+// and /posts/[slug].
+async function loadFromSlug(s: string | string[] | undefined) {
+  loading.value = true
+  error.value = ''
   try {
-    const post = await rpc.call<PostFull>('posts.get', { slug: route.params.slug })
+    const post = await rpc.call<PostFull>('posts.get', { slug: String(s ?? '') })
     id.value = post.id
     title.value = post.title
     slug.value = post.slug
@@ -43,10 +50,12 @@ onMounted(async () => {
     published.value = post.published
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
+    id.value = ''
   } finally {
     loading.value = false
   }
-})
+}
+watch(() => route.params.slug, loadFromSlug, { immediate: true })
 
 async function save(nextPublished?: boolean) {
   saving.value = true
