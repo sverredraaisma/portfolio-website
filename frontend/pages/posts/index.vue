@@ -9,6 +9,7 @@ type PostSummary = {
   createdAt: string
   author: string
   tags: string[]
+  commentCount: number
 }
 type PostsPage = { items: PostSummary[]; page: number; pageSize: number; hasMore: boolean }
 
@@ -139,6 +140,14 @@ useHead({
         <div class="text-xs text-zinc-500 mt-1">
           {{ formatTime(p.createdAt) }} ·
           <NuxtLink :to="`/u/${p.author}`" class="hover:underline text-zinc-500 hover:text-cyan-500">{{ p.author }}</NuxtLink>
+          <template v-if="p.commentCount > 0">
+            ·
+            <NuxtLink
+              :to="`/posts/${p.slug}#c-`"
+              class="hover:text-cyan-500"
+              :title="`${p.commentCount} ${p.commentCount === 1 ? 'comment' : 'comments'}`"
+            >💬 {{ p.commentCount }}</NuxtLink>
+          </template>
         </div>
         <div v-if="p.tags?.length" class="mt-2 flex flex-wrap gap-1">
           <NuxtLink

@@ -59,7 +59,7 @@ public sealed record UploadImageParams
 
 // ---- Response records ------------------------------------------------------
 
-public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, IReadOnlyList<string> Tags);
+public sealed record PostSummary(Guid Id, string Title, string Slug, DateTime CreatedAt, string Author, bool Published, IReadOnlyList<string> Tags, int CommentCount);
 
 /// One entry in the tag-cloud response. `count` is the number of *published*
 /// posts carrying the tag — drafts don't contribute, since they're invisible
@@ -144,11 +144,18 @@ public class PostMethods
         }
 
         // Fetch one extra row so HasMore can be computed without a COUNT(*).
+        // Comment count is a correlated subquery — at pageSize <= 50 the
+        // overhead is negligible; the alternative (LEFT JOIN + GROUP BY)
+        // would explode the row count for posts with many tags via the
+        // text[] join.
         var rows = await query
             .OrderByDescending(post => post.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
-            .Select(post => new PostSummary(post.Id, post.Title, post.Slug, post.CreatedAt, post.Author!.Username, post.Published, post.Tags))
+            .Select(post => new PostSummary(
+                post.Id, post.Title, post.Slug, post.CreatedAt,
+                post.Author!.Username, post.Published, post.Tags,
+                post.Comments.Count))
             .ToListAsync(ctx.CancellationToken);
 
         var hasMore = rows.Count > pageSize;

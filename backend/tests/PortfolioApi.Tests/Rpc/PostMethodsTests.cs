@@ -164,6 +164,25 @@ public class PostMethodsTests
     public Task List_filters_by_tag() => Task.CompletedTask;
 
     [Fact]
+    public async Task List_returns_per_post_comment_count()
+    {
+        var (sut, db, admin, member) = Setup();
+        var quiet = await sut.Create(new CreatePostParams { Title = "quiet", Slug = "quiet", Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        var loud  = await sut.Create(new CreatePostParams { Title = "loud",  Slug = "loud",  Blocks = Blocks(), Published = true }, TestRpcContext.Admin(admin.Id));
+        // Three comments on the louder post, none on the quiet one.
+        db.Comments.AddRange(
+            new Comment { PostId = loud.Id, AuthorId = member.Id, Body = "a" },
+            new Comment { PostId = loud.Id, AuthorId = member.Id, Body = "b" },
+            new Comment { PostId = loud.Id, AuthorId = member.Id, Body = "c" });
+        await db.SaveChangesAsync();
+
+        var page = await sut.List(new PostListParams(), TestRpcContext.Anonymous());
+
+        page.Items.Single(p => p.Slug == "quiet").CommentCount.Should().Be(0);
+        page.Items.Single(p => p.Slug == "loud").CommentCount.Should().Be(3);
+    }
+
+    [Fact]
     public async Task Get_drafts_404_for_strangers()
     {
         var (sut, _, admin, member) = Setup();
