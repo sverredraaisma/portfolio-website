@@ -2,6 +2,7 @@
 import { hashPasswordForTransit } from '~/composables/usePasswordHash'
 import { useAuthStore } from '~/stores/auth'
 import { startPasskeyAssertion, isPasskeySupported } from '~/composables/useWebAuthn'
+import { safeRedirect } from '~/composables/useSafeRedirect'
 
 type AuthUser = { id: string; username: string; email: string; emailVerified?: boolean }
 type AuthSuccess = { accessToken: string; refreshToken: string; user: AuthUser }
@@ -17,12 +18,17 @@ const loading = ref(false)
 const unverified = ref(false)
 const resendStatus = ref<'idle' | 'sending' | 'sent'>('idle')
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const rpc = useRpc()
 
 // Surface the "verify your email" branch separately so the UI can offer a
 // resend button — login throws this as a generic 'invalid' error otherwise.
 const UNVERIFIED_NEEDLE = 'email not verified'
+
+function destinationAfterLogin(): string {
+  return safeRedirect(route.query.redirect) ?? '/posts'
+}
 
 function applyResult(res: LoginResponse) {
   if (res.challenge) {
@@ -32,7 +38,7 @@ function applyResult(res: LoginResponse) {
   }
   if (res.tokens) {
     auth.setSession(res.tokens.accessToken, res.tokens.refreshToken, res.tokens.user)
-    router.push('/posts')
+    router.push(destinationAfterLogin())
   }
 }
 
