@@ -31,6 +31,9 @@ public class AppDbContext : DbContext
             e.HasIndex(u => u.Email).IsUnique();
             e.Property(u => u.Username).HasMaxLength(64);
             e.Property(u => u.Email).HasMaxLength(255);
+            // Bio cap matches what the SetBio RPC enforces. The DB column
+            // upper bound is the second line of defence.
+            e.Property(u => u.Bio).HasMaxLength(280);
         });
 
         b.Entity<Post>(e =>

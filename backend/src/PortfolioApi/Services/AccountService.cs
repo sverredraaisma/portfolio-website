@@ -91,6 +91,7 @@ public class AccountService : IAccountService
             recoveryCodesRemaining,
             user.CreatedAt,
             user.NotifyOnComment,
+            user.Bio ?? string.Empty,
             posts,
             comments,
             refreshTokens,

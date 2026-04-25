@@ -15,6 +15,7 @@ type Profile = {
   username: string
   isAdmin: boolean
   createdAt: string
+  bio: string
   postCount: number
   commentCount: number
   recentPosts: ProfilePost[]
@@ -100,6 +101,10 @@ function preview(body: string, max = 140): string {
           ·
           {{ profile.commentCount }} {{ profile.commentCount === 1 ? 'comment' : 'comments' }}
         </p>
+        <p
+          v-if="profile.bio"
+          class="text-sm text-zinc-700 dark:text-zinc-300 mt-3 whitespace-pre-wrap"
+        >{{ profile.bio }}</p>
       </header>
 
       <section v-if="profile.recentPosts.length" class="mb-8">

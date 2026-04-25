@@ -18,6 +18,13 @@ public sealed record SetNotifyOnCommentParams
     public required bool Enabled { get; init; }
 }
 
+public sealed record SetBioParams
+{
+    /// Empty string clears the bio. The RPC trims and length-checks before
+    /// writing; the column is also bounded at 280 chars in the DB.
+    public required string Bio { get; init; }
+}
+
 public class AccountMethods
 {
     private readonly IAccountService _accounts;
@@ -56,6 +63,24 @@ public class AccountMethods
         var rows = await _db.Users
             .Where(u => u.Id == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.NotifyOnComment, p.Enabled), ctx.CancellationToken);
+        if (rows == 0) throw new AuthFailedException("Unknown user");
+        return new OkResult();
+    }
+
+    private const int MaxBioLength = 280;
+
+    /// Updates the user's public bio. Trim + clamp at 280 chars to match
+    /// the DB column upper bound. Empty string clears the bio.
+    public async Task<OkResult> SetBio(SetBioParams p, RpcContext ctx)
+    {
+        var userId = ctx.RequireUserId();
+        var bio = (p.Bio ?? string.Empty).Trim();
+        if (bio.Length > MaxBioLength)
+            throw new InvalidOperationException($"bio must be {MaxBioLength} characters or fewer");
+
+        var rows = await _db.Users
+            .Where(u => u.Id == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.Bio, bio), ctx.CancellationToken);
         if (rows == 0) throw new AuthFailedException("Unknown user");
         return new OkResult();
     }

@@ -28,6 +28,7 @@ type AccountExport = {
   notifyOnComment: boolean
   posts: Array<{ id: string; title: string; slug: string; createdAt: string; updatedAt: string; published: boolean }>
   comments: Array<{ id: string; postId: string; body: string; createdAt: string }>
+  bio: string
   refreshTokens: Array<{ id: string; createdAt: string; expiresAt: string; revokedAt: string | null }>
   auditEvents: Array<{ id: string; kind: string; detail: string | null; at: string }>
   bookmarks: Array<{ id: string; postId: string; postTitle: string; postSlug: string; savedAt: string }>
@@ -110,6 +111,29 @@ async function unsave(p: SavedPost) {
     toast.error(e instanceof Error ? e.message : String(e))
   }
 }
+
+// Bio panel state
+const BIO_MAX = 280
+const bioDraft = ref('')
+const savingBio = ref(false)
+async function saveBio() {
+  savingBio.value = true
+  try {
+    await rpc.call<void>('account.setBio', { bio: bioDraft.value })
+    if (data.value) data.value = { ...data.value, bio: bioDraft.value.trim() }
+    toast.success('Bio updated.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    savingBio.value = false
+  }
+}
+// Hydrate the textarea from the loaded export so the user sees what's
+// already there. Setting `data` itself can lag the textarea, so watch
+// it instead of binding two-way to data.bio directly.
+watch(() => data.value?.bio, (v) => {
+  if (typeof v === 'string') bioDraft.value = v
+}, { immediate: true })
 
 // Notification preferences panel state
 const togglingNotify = ref(false)
@@ -609,6 +633,31 @@ async function deleteAccount() {
             >✕</button>
           </li>
         </ul>
+      </section>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ public bio</h2>
+        <p class="text-xs text-zinc-500">
+          Shown on your <NuxtLink :to="`/u/${data.username}`" class="hover:text-cyan-400 underline">/u/{{ data.username }}</NuxtLink>
+          page. Plain text, up to {{ BIO_MAX }} characters. Empty clears it.
+        </p>
+        <textarea
+          v-model="bioDraft"
+          rows="3"
+          :maxlength="BIO_MAX"
+          placeholder="A line or two about you..."
+          class="w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm leading-relaxed"
+        />
+        <div class="flex items-center gap-3">
+          <button
+            :disabled="savingBio"
+            @click="saveBio"
+            class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-4 py-2 text-sm disabled:opacity-50"
+          >{{ savingBio ? '...' : 'save bio' }}</button>
+          <span class="text-xs text-zinc-500">
+            {{ bioDraft.length }} / {{ BIO_MAX }}
+          </span>
+        </div>
       </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">

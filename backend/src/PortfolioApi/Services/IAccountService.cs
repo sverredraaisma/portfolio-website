@@ -41,6 +41,9 @@ public sealed record AccountExport(
     /// Whether the user has the "email me on a new comment" preference on.
     /// Default true on registration; flipped via account.setNotifyOnComment.
     bool NotifyOnComment,
+    /// Public bio shown on /u/<username>. Empty when unset. Edited via
+    /// account.setBio.
+    string Bio,
     IReadOnlyList<AccountExportPost> Posts,
     IReadOnlyList<AccountExportComment> Comments,
     IReadOnlyList<AccountExportRefreshToken> RefreshTokens,

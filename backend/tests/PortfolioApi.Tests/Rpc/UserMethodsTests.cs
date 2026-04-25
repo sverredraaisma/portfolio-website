@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using PortfolioApi.Data;
 using PortfolioApi.Models;
 using PortfolioApi.Rpc.Methods;
@@ -49,6 +50,21 @@ public class UserMethodsTests
         dto.IsAdmin.Should().BeTrue();
         dto.PostCount.Should().Be(0);
         dto.CommentCount.Should().Be(0);
+        dto.Bio.Should().Be("", "fresh accounts have no bio set");
+    }
+
+    [Fact]
+    public async Task Profile_surfaces_the_users_bio_when_one_is_set()
+    {
+        var (sut, db, _) = Setup();
+        var u = await db.Users.FirstAsync(x => x.Username == "alice");
+        u.Bio = "I write about Rust and synthesizers.";
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var dto = await sut.GetProfile(new GetProfileParams { Username = "alice" }, TestRpcContext.Anonymous());
+
+        dto.Bio.Should().Be("I write about Rust and synthesizers.");
     }
 
     [Fact]

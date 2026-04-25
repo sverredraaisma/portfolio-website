@@ -100,6 +100,7 @@ public class RpcRouter
         Register("account.export", RpcHandlers.Typed<AccountExport>(accounts.Export));
         Register("account.delete", RpcHandlers.Typed<DeleteAccountParams, OkResult>(accounts.Delete));
         Register("account.setNotifyOnComment", RpcHandlers.Typed<SetNotifyOnCommentParams, OkResult>(accounts.SetNotifyOnComment));
+        Register("account.setBio", RpcHandlers.Typed<SetBioParams, OkResult>(accounts.SetBio));
 
         // Public user profile (read-only — no PII beyond what's already public)
         Register("users.getProfile", RpcHandlers.Typed<GetProfileParams, UserProfileDto>(users.GetProfile));

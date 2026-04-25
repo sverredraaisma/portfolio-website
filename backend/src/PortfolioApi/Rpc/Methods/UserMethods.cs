@@ -31,6 +31,9 @@ public sealed record UserProfileDto(
     string Username,
     bool IsAdmin,
     DateTime CreatedAt,
+    /// User-supplied short bio. Empty string = no bio set; the frontend
+    /// uses presence to decide whether to render the bio block at all.
+    string Bio,
     int PostCount,
     int CommentCount,
     IReadOnlyList<ProfilePostDto> RecentPosts,
@@ -62,7 +65,7 @@ public class UserMethods
         var user = await _db.Users
             .AsNoTracking()
             .Where(u => u.Username == key)
-            .Select(u => new { u.Id, u.Username, u.IsAdmin, u.CreatedAt })
+            .Select(u => new { u.Id, u.Username, u.IsAdmin, u.CreatedAt, u.Bio })
             .FirstOrDefaultAsync(ctx.CancellationToken)
             ?? throw new InvalidOperationException("User not found");
 
@@ -100,6 +103,7 @@ public class UserMethods
             user.Username,
             user.IsAdmin,
             user.CreatedAt,
+            user.Bio ?? string.Empty,
             postCount,
             commentCount,
             recentPosts,

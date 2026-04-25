@@ -36,6 +36,10 @@ public class User
     /// their work gets a reply. Toggleable from the account page.
     public bool NotifyOnComment { get; set; } = true;
 
+    /// Free-form short bio surfaced on the public /u/<username> profile.
+    /// Capped at 280 chars (server-side). Empty string = no bio shown.
+    public string Bio { get; set; } = string.Empty;
+
     public List<Post> Posts { get; set; } = new();
     public List<Comment> Comments { get; set; } = new();
 }
