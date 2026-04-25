@@ -38,7 +38,12 @@ const AUDIT_KIND_LABELS: Record<string, string> = {
   'totp.enabled': '2FA enabled',
   'totp.disabled': '2FA disabled',
   'totp.recoveryCodesRegenerated': 'Recovery codes regenerated',
-  'sessions.revoked': 'All sessions revoked'
+  'sessions.revoked': 'All sessions revoked',
+  'passkey.added': 'Passkey added',
+  'passkey.removed': 'Passkey removed',
+  'location.shared': 'Location shared',
+  'location.updated': 'Location updated',
+  'location.cleared': 'Location cleared'
 }
 function auditLabel(kind: string) { return AUDIT_KIND_LABELS[kind] ?? kind }
 
@@ -72,6 +77,92 @@ const revokeMessage = ref('')
 const newEmail = ref('')
 const requestingEmail = ref(false)
 const emailMessage = ref('')
+
+// Location-sharing panel state
+type SharedLocation = {
+  username: string
+  isAdmin: boolean
+  latitude: number
+  longitude: number
+  label: string | null
+  updatedAt: string
+}
+const myLocation = ref<SharedLocation | null>(null)
+const placeQuery = ref('')
+const locationBusy = ref(false)
+const locationMessage = ref('')
+
+async function loadMyLocation() {
+  try { myLocation.value = await rpc.call<SharedLocation | null>('location.getMine') }
+  catch { /* anonymous loadExport will surface the auth error elsewhere */ }
+}
+
+async function shareBrowserLocation() {
+  locationMessage.value = ''
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    locationMessage.value = 'Your browser does not expose geolocation.'
+    return
+  }
+  locationBusy.value = true
+  // navigator.geolocation is callback-based — wrap so we can await.
+  await new Promise<void>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await rpc.call<void>('location.shareCoords', {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          })
+          toast.success('Location shared.')
+          await loadMyLocation()
+        } catch (e) {
+          locationMessage.value = e instanceof Error ? e.message : String(e)
+        } finally {
+          locationBusy.value = false
+          resolve()
+        }
+      },
+      (err) => {
+        locationMessage.value = err.code === err.PERMISSION_DENIED
+          ? 'Browser geolocation was denied.'
+          : 'Could not read your location.'
+        locationBusy.value = false
+        resolve()
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
+    )
+  })
+}
+
+async function shareNamedLocation() {
+  if (!placeQuery.value.trim()) return
+  locationMessage.value = ''
+  locationBusy.value = true
+  try {
+    await rpc.call<void>('location.shareNamed', { place: placeQuery.value })
+    toast.success('Location shared.')
+    placeQuery.value = ''
+    await loadMyLocation()
+  } catch (e) {
+    locationMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    locationBusy.value = false
+  }
+}
+
+async function clearLocation() {
+  if (!confirm('Stop sharing your location?')) return
+  locationBusy.value = true
+  try {
+    await rpc.call<void>('location.clear')
+    myLocation.value = null
+    toast.info('Location cleared.')
+  } catch (e) {
+    locationMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    locationBusy.value = false
+  }
+}
 
 // Verification expiry banner state
 const verifyResendStatus = ref<'idle' | 'sending' | 'sent'>('idle')
@@ -178,7 +269,7 @@ async function renamePasskey(p: PasskeyDto) {
 
 onMounted(async () => {
   passkeysSupported.value = isPasskeySupported()
-  await loadPasskeys()
+  await Promise.all([loadPasskeys(), loadMyLocation()])
 })
 
 async function loadExport() {
@@ -447,6 +538,62 @@ async function deleteAccount() {
           · <span class="text-zinc-500">sessions:</span> {{ data.refreshTokens.length }}
         </div>
       </div>
+
+      <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
+        <h2 class="text-lg text-cyan-400">$ share location</h2>
+        <p class="text-xs text-zinc-500 max-w-prose">
+          Pin yourself on the public <NuxtLink to="/map" class="underline hover:text-cyan-400">/map</NuxtLink>.
+          Coords are rounded to ~110m before they reach the wire — your exact
+          home address can't be inferred. Opt-in; clear it any time.
+        </p>
+
+        <div v-if="myLocation" class="text-sm border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 rounded p-3 space-y-1">
+          <div>
+            currently sharing:
+            <span class="text-cyan-700 dark:text-cyan-300 font-mono">
+              {{ myLocation.latitude.toFixed(3) }}, {{ myLocation.longitude.toFixed(3) }}
+            </span>
+          </div>
+          <div v-if="myLocation.label" class="text-xs text-zinc-500 truncate">
+            label: {{ myLocation.label }}
+          </div>
+          <div class="text-xs text-zinc-500">
+            updated {{ new Date(myLocation.updatedAt).toLocaleString() }}
+          </div>
+          <button
+            :disabled="locationBusy"
+            @click="clearLocation"
+            class="text-xs mt-1 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded px-3 py-1 disabled:opacity-50"
+          >stop sharing</button>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="space-y-2">
+            <p class="text-xs text-zinc-500">option 1: ask the browser</p>
+            <button
+              :disabled="locationBusy"
+              @click="shareBrowserLocation"
+              class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-3 py-2 text-sm disabled:opacity-50"
+            >📍 use my browser location</button>
+          </div>
+          <div class="space-y-2">
+            <p class="text-xs text-zinc-500">option 2: name a place</p>
+            <form @submit.prevent="shareNamedLocation" class="flex gap-2">
+              <input
+                v-model="placeQuery"
+                placeholder="e.g. Amsterdam"
+                class="flex-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded px-3 py-2 text-sm"
+              />
+              <button
+                :disabled="locationBusy || !placeQuery.trim()"
+                class="bg-cyan-600 hover:bg-cyan-500 text-black font-bold rounded px-3 py-2 text-sm disabled:opacity-50"
+              >share</button>
+            </form>
+          </div>
+        </div>
+
+        <p v-if="locationMessage" class="text-xs text-red-400">{{ locationMessage }}</p>
+      </section>
 
       <section class="border border-zinc-300 dark:border-zinc-800 rounded p-4 space-y-3">
         <h2 class="text-lg text-cyan-400">$ passkeys</h2>

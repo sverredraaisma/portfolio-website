@@ -19,7 +19,7 @@ onMounted(async () => {
 const router = useRouter()
 const cmd = ref('')
 
-const HELP = '> commands: posts, about, verify, privacy, clear, help'
+const HELP = '> commands: posts, map, about, verify, privacy, clear, help'
 
 function run() {
   const c = cmd.value.trim().toLowerCase()
@@ -27,6 +27,7 @@ function run() {
   if (!c) return
   switch (c) {
     case 'posts':   router.push('/posts'); break
+    case 'map':     router.push('/map'); break
     case 'verify':  router.push('/verify-statement'); break
     case 'privacy': router.push('/privacy'); break
     case 'about':   shown.value.push('> Hi, I build things. Frontends, backends, the occasional bad joke.'); break

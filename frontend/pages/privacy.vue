@@ -64,6 +64,20 @@ const lastUpdated = '2026-04-24'
           through an SMTP server. The address you registered with is the only personal datum
           shared with the SMTP provider, and only for the duration of delivery.
         </li>
+        <li>
+          <strong>Shared location (opt-in).</strong> If you choose to share your location from
+          your account page, the latitude and longitude you submit are stored alongside your
+          username and shown on the public
+          <NuxtLink to="/map" class="hover:text-cyan-400 underline">/map</NuxtLink>.
+          The public list rounds the coordinates to ~110 m precision so an exact home
+          address can't be inferred. You can clear it any time, and it disappears
+          automatically when you delete your account.
+          <br />
+          When you share by typing a place name (e.g. "Amsterdam"), the lookup goes through
+          the public OpenStreetMap geocoder
+          (<a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener" class="hover:text-cyan-400 underline">Nominatim</a>);
+          the request is made server-side so your IP address is not shared with them.
+        </li>
       </ul>
     </section>
 
